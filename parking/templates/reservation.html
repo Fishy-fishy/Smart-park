@@ -1,0 +1,1096 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reservations | SmartPark</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <<link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+    <link rel="stylesheet" href="{% static 'css/reservation.css' %}">
+    <link rel="stylesheet" href="{% static 'css/notifications.css' %}">
+</head>
+
+<body>
+
+<div class="app">
+
+    <!-- ============ SIDEBAR ============ -->
+    <aside class="sidebar" id="sidebar">
+
+        <div class="brand">
+            <div class="brand-logo">
+                <i class="bi bi-p-square-fill"></i>
+            </div>
+            <div>
+                <h1>SmartPark</h1>
+                <span>Slot Allocation System</span>
+            </div>
+        </div>
+
+        <nav class="nav">
+
+            <p class="nav-label">Main</p>
+
+            {% if is_admin %}
+                <a href="{% url 'admin_request' %}" class="nav-link"><i class="bi bi-person-gear"></i> Admins &amp; Drivers</a>
+            {% else %}
+                <a href="{% url 'driver_home' %}" class="nav-link"><i class="bi bi-grid-1x2-fill"></i> Dashboard</a>
+            {% endif %}
+
+            <a href="{% url 'parking_slot' %}" class="nav-link">
+                <i class="bi bi-map"></i>
+                Parking Slots
+            </a>
+
+            <a href="{% url 'vehicles' %}" class="nav-link">
+                <i class="bi bi-car-front"></i>
+                {% if is_admin %}Vehicles{% else %}My Vehicles{% endif %}
+            </a>
+
+            <a href="{% url 'reservation' %}" class="nav-link active">
+                <i class="bi bi-calendar2-check"></i>
+                Reservations
+            </a>
+
+            <p class="nav-label">Management</p>
+
+            {% if is_admin %}
+                <a href="{% url 'allocation_history' %}" class="nav-link"><i class="bi bi-clock-history"></i> Allocation History</a>
+            {% else %}
+                <a href="{% url 'my_history' %}" class="nav-link"><i class="bi bi-clock-history"></i> My History</a>
+            {% endif %}
+            <a href="#" class="nav-link"><i class="bi bi-credit-card"></i> Payments</a>
+            <a href="#" class="nav-link"><i class="bi bi-bar-chart-line"></i> Reports</a>
+            <a href="#" class="nav-link"><i class="bi bi-gear"></i> Settings</a>
+
+        </nav>
+
+    </aside>
+
+
+    <!-- ============ MAIN CONTENT ============ -->
+    <main class="main">
+
+        <!-- TOPBAR -->
+        <header class="topbar">
+
+            <div class="topbar-title">
+
+                <h2>Reservations</h2>
+
+                <p>
+                    {% if is_admin %}
+                        Manage and monitor all parking reservations.
+                    {% else %}
+                        Manage your parking reservations.
+                    {% endif %}
+                </p>
+
+            </div>
+
+            <div class="topbar-actions">
+
+                <div class="notif-wrap" id="notif-wrap"
+     data-url="{% url 'notifications_data' %}"
+     data-user="{{ request.user.pk }}">
+    <button type="button" class="notif-btn" id="notif-btn" aria-label="Notifications" aria-expanded="false">
+        <i class="bi bi-bell"></i>
+        <span class="notif-dot" id="notif-dot" hidden></span>
+    </button>
+
+    <div class="notif-panel" id="notif-panel" role="region" aria-label="Notifications">
+        <div class="notif-head">
+            <div>
+                <strong>Notifications</strong>
+                <span class="notif-count" id="notif-count" hidden></span>
+            </div>
+            <button type="button" id="notif-read-all">Mark all as read</button>
+        </div>
+        <ul class="notif-list" id="notif-list">
+            <li class="notif-empty">Loading...</li>
+        </ul>
+    </div>
+</div>
+
+                <div class="user">
+
+                    <div class="avatar">
+                        {{ request.user.username|slice:":1"|upper }}
+                    </div>
+
+                    <div class="user-info">
+
+                        <strong>
+                            {{ request.user.get_full_name|default:request.user.username }}
+                        </strong>
+
+                        <span>
+                            {% if is_admin %}
+                                Administrator
+                            {% else %}
+                                Driver
+                            {% endif %}
+                        </span>
+
+                    </div>
+
+                </div>
+
+                <!-- LOGOUT FORM -->
+                <form
+                    method="post"
+                    action="{% url 'logout' %}"
+                    class="logout-form"
+                    id="logout-form">
+
+                    {% csrf_token %}
+
+                    <button
+                        type="button"
+                        class="logout-btn"
+                        id="logout-open"
+                        title="Log out">
+
+                        <i class="bi bi-box-arrow-right"></i>
+                        <span>Log out</span>
+
+                    </button>
+
+                </form>
+
+            </div>
+
+        </header>
+
+
+        <!-- FLASH MESSAGES -->
+        {% if messages %}
+
+        <div class="toasts" id="toasts">
+
+            {% for message in messages %}
+
+            <div class="toast {{ message.tags }}">
+
+                <i class="bi
+                    {% if message.tags == 'success' %}
+                        bi-check-circle-fill
+                    {% elif message.tags == 'error' %}
+                        bi-x-circle-fill
+                    {% elif message.tags == 'warning' %}
+                        bi-exclamation-triangle-fill
+                    {% else %}
+                        bi-info-circle-fill
+                    {% endif %}">
+                </i>
+
+                <span>{{ message }}</span>
+
+            </div>
+
+            {% endfor %}
+
+        </div>
+
+        {% endif %}
+
+
+        <!-- PAGE HEADING -->
+        <section class="page-heading">
+
+            <div>
+
+                <h3>
+                    {% if is_admin %}
+                        Reservation Management
+                    {% else %}
+                        My Reservations
+                    {% endif %}
+                </h3>
+
+                <p>
+                    {% if is_admin %}
+                        Review reservation requests and manage parking schedules.
+                    {% else %}
+                        Book a parking slot and track your reservation status.
+                    {% endif %}
+                </p>
+
+            </div>
+
+        </section>
+
+
+        <!-- ============ STATISTICS ============ -->
+        <section class="stats">
+
+            <article class="stat">
+
+                <div class="stat-icon blue">
+                    <i class="bi bi-calendar-check"></i>
+                </div>
+
+                <div>
+                    <span>Total Reservations</span>
+                    <h3>{{ total_reservations|default:0 }}</h3>
+                </div>
+
+            </article>
+
+
+            <article class="stat">
+
+                <div class="stat-icon amber">
+                    <i class="bi bi-hourglass-split"></i>
+                </div>
+
+                <div>
+                    <span>Pending</span>
+                    <h3>{{ pending_reservations|default:0 }}</h3>
+                </div>
+
+            </article>
+
+
+            <article class="stat">
+
+                <div class="stat-icon green">
+                    <i class="bi bi-check-circle"></i>
+                </div>
+
+                <div>
+                    <span>Confirmed</span>
+                    <h3>{{ approved_reservations|default:0 }}</h3>
+                </div>
+
+            </article>
+
+
+            <article class="stat">
+
+                <div class="stat-icon red">
+                    <i class="bi bi-x-circle"></i>
+                </div>
+
+                <div>
+                    <span>Cancelled</span>
+                    <h3>{{ rejected_reservations|default:0 }}</h3>
+                </div>
+
+            </article>
+
+        </section>
+
+
+        <!-- ============ DRIVER RESERVATION FORM ============ -->
+        {% if not is_admin %}
+
+        <section class="card">
+
+            <div class="card-head">
+
+                <div>
+                    <h3>
+                        <i class="bi bi-plus-circle"></i>
+                        Create a Reservation
+                    </h3>
+
+                    <span class="muted">
+                        Enter your parking reservation details.
+                    </span>
+                </div>
+
+            </div>
+
+
+            <form
+                method="post"
+                action="{% url 'reservation_create' %}"
+                class="reservation-form"
+                id="reservation-form">
+
+                {% csrf_token %}
+
+
+                <!-- VEHICLE -->
+                <div class="field">
+
+                    <label for="vehicle">
+                        Select Vehicle
+                    </label>
+
+                    <div class="input">
+
+                        <i class="bi bi-car-front"></i>
+
+                        <select name="vehicle" id="vehicle" required>
+
+                            <option value="">
+                                Choose your vehicle
+                            </option>
+
+                            {% for vehicle in vehicles %}
+
+                            <option value="{{ vehicle.id }}">
+
+                                {{ vehicle.plate_number }} -
+                                {{ vehicle.get_vehicle_type_display|default:vehicle.vehicle_type }}
+
+                            </option>
+
+                            {% empty %}
+
+                            <option value="" disabled>
+                                No registered vehicles
+                            </option>
+
+                            {% endfor %}
+
+                        </select>
+
+                    </div>
+
+                </div>
+
+
+                <!-- PARKING SLOT -->
+                <div class="field">
+
+                    <label for="slot">
+                        Select Parking Slot
+                    </label>
+
+                    <div class="input">
+
+                        <i class="bi bi-p-square"></i>
+
+                        <select name="slot" id="slot" required>
+
+                            <option value="">
+                                Choose an available slot
+                            </option>
+
+                            {% for slot in slots %}
+
+                                {% if slot.status == 'available' %}
+
+                                <option value="{{ slot.id }}">
+
+                                    {{ slot.zone.name }} -
+                                    {{ slot.slot_number }}
+                                    ({{ slot.get_slot_type_display|default:slot.slot_type }})
+
+                                </option>
+
+                                {% endif %}
+
+                            {% empty %}
+
+                            <option value="" disabled>
+                                No available parking slots
+                            </option>
+
+                            {% endfor %}
+
+                        </select>
+
+                    </div>
+
+                </div>
+
+
+                <!-- START DATETIME -->
+                <div class="field">
+
+                    <label for="start-time">
+                        Reservation Start
+                    </label>
+
+                    <div class="input">
+
+                        <i class="bi bi-calendar-event"></i>
+
+                        <input
+                            type="datetime-local"
+                            name="start_time"
+                            id="start-time"
+                            required>
+
+                    </div>
+
+                </div>
+
+
+                <!-- END DATETIME -->
+                <div class="field">
+
+                    <label for="end-time">
+                        Reservation End
+                    </label>
+
+                    <div class="input">
+
+                        <i class="bi bi-calendar-check"></i>
+
+                        <input
+                            type="datetime-local"
+                            name="end_time"
+                            id="end-time"
+                            required>
+
+                    </div>
+
+                </div>
+
+
+                <!-- SUBMIT -->
+                <div class="field full">
+
+                    <button
+                        type="submit"
+                        class="btn-primary"
+                        id="reservation-submit">
+
+                        <i class="bi bi-calendar-plus"></i>
+                        Submit Reservation
+
+                    </button>
+
+                </div>
+
+            </form>
+
+        </section>
+
+        {% endif %}
+
+
+        <!-- ============ RESERVATION TABLE ============ -->
+        <section class="card">
+
+            <div class="card-head">
+
+                <div>
+
+                    <h3>
+                        {% if is_admin %}
+                            All Reservations
+                        {% else %}
+                            My Reservation History
+                        {% endif %}
+                    </h3>
+
+                    <span class="muted">
+
+                        {% if is_admin %}
+                            View and manage reservation requests from all drivers.
+                        {% else %}
+                            Monitor your reservation requests and their status.
+                        {% endif %}
+
+                    </span>
+
+                </div>
+
+
+                <!-- TABLE CONTROLS -->
+                <div class="table-controls">
+
+                    <div class="input">
+
+                        <i class="bi bi-search"></i>
+
+                        <input
+                            type="text"
+                            id="reservation-search"
+                            placeholder="Search plate or driver...">
+
+                    </div>
+
+                    <select id="status-filter">
+
+                        <option value="">All Status</option>
+                        <option value="pending">Pending</option>
+                        <option value="confirmed">Confirmed</option>
+                        <option value="cancelled">Cancelled</option>
+                        <option value="completed">Completed</option>
+
+                    </select>
+
+                </div>
+
+            </div>
+
+
+            <div class="table-wrap">
+
+                <table class="table" id="reservation-table">
+
+                    <thead>
+
+                        <tr>
+
+                            {% if is_admin %}
+                                <th>Driver</th>
+                            {% endif %}
+
+                            <th>Vehicle</th>
+                            <th>Parking Slot</th>
+                            <th>Zone</th>
+                            <th>Start Time</th>
+                            <th>End Time</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+
+                        </tr>
+
+                    </thead>
+
+
+                    <tbody>
+
+                        {% for reservation in reservations %}
+
+                        <tr data-status="{{ reservation.status|lower }}">
+
+                            {% if is_admin %}
+
+                            <td>
+
+                                <div class="cell-vehicle">
+
+                                    <strong>
+                                        {{ reservation.created_by.get_full_name|default:reservation.created_by.username }}
+                                    </strong>
+
+                                    <small>
+                                        Driver
+                                    </small>
+
+                                </div>
+
+                            </td>
+
+                            {% endif %}
+
+
+                            <!-- VEHICLE -->
+                            <td>
+
+                                <div class="cell-vehicle">
+
+                                    <span class="plate">
+                                        {{ reservation.vehicle.plate_number }}
+                                    </span>
+
+                                    <small>
+                                        {{ reservation.vehicle.get_vehicle_type_display|default:reservation.vehicle.vehicle_type }}
+                                    </small>
+
+                                </div>
+
+                            </td>
+
+
+                            <!-- SLOT -->
+                            <td>
+                                <strong>
+                                    {{ reservation.slot.slot_number }}
+                                </strong>
+                            </td>
+
+
+                            <!-- ZONE -->
+                            <td>
+                                {{ reservation.slot.zone.name }}
+                            </td>
+
+
+                            <!-- START TIME -->
+                            <td>
+                                {{ reservation.start_time|date:"M d, Y h:i A" }}
+                            </td>
+
+
+                            <!-- END TIME -->
+                            <td>
+                                {{ reservation.end_time|date:"M d, Y h:i A" }}
+                            </td>
+
+
+                            <!-- STATUS -->
+                            <td>
+
+                                {% if reservation.status == 'pending' %}
+
+                                    <span class="badge pending">
+                                        <i class="bi bi-hourglass-split"></i>
+                                        Pending
+                                    </span>
+
+                                {% elif reservation.status == 'confirmed' %}
+
+                                    <span class="badge confirmed">
+                                        <i class="bi bi-check-circle-fill"></i>
+                                        Confirmed
+                                    </span>
+
+                                {% elif reservation.status == 'cancelled' %}
+
+                                    <span class="badge cancelled">
+                                        <i class="bi bi-x-circle-fill"></i>
+                                        Cancelled
+                                    </span>
+
+                                {% elif reservation.status == 'completed' %}
+
+                                    <span class="badge completed">
+                                        <i class="bi bi-check2-all"></i>
+                                        Completed
+                                    </span>
+
+                                {% else %}
+
+                                    <span class="badge pending">
+                                        {{ reservation.get_status_display|default:reservation.status }}
+                                    </span>
+
+                                {% endif %}
+
+                            </td>
+
+
+                            <!-- ACTIONS -->
+                            <td>
+
+                                <div class="action-buttons">
+
+                                    {% if is_admin %}
+
+                                        {% if reservation.status == 'pending' %}
+
+                                            <!-- APPROVE -->
+                                            <form
+                                                method="post"
+                                                action="{% url 'reservation_approve' reservation.pk %}">
+
+                                                {% csrf_token %}
+
+                                                <button
+                                                    type="submit"
+                                                    class="action-btn approve-btn">
+
+                                                    <i class="bi bi-check-lg"></i>
+                                                    Approve
+
+                                                </button>
+
+                                            </form>
+
+
+                                            <!-- REJECT -->
+                                            <form
+                                                method="post"
+                                                action="{% url 'reservation_reject' reservation.pk %}"
+                                                onsubmit="return confirm('Reject this reservation?');">
+
+                                                {% csrf_token %}
+
+                                                <button
+                                                    type="submit"
+                                                    class="action-btn reject-btn">
+
+                                                    <i class="bi bi-x-lg"></i>
+                                                    Reject
+
+                                                </button>
+
+                                            </form>
+
+
+                                        {% elif reservation.status == 'confirmed' %}
+
+                                            <!-- COMPLETE -->
+                                            <form
+                                                method="post"
+                                                action="{% url 'reservation_complete' reservation.pk %}">
+
+                                                {% csrf_token %}
+
+                                                <button
+                                                    type="submit"
+                                                    class="action-btn approve-btn">
+
+                                                    <i class="bi bi-check-circle"></i>
+                                                    Complete
+
+                                                </button>
+
+                                            </form>
+
+
+                                            <!-- CANCEL -->
+                                            <form
+                                                method="post"
+                                                action="{% url 'reservation_cancel' reservation.pk %}"
+                                                onsubmit="return confirm('Cancel this reservation?');">
+
+                                                {% csrf_token %}
+
+                                                <button
+                                                    type="submit"
+                                                    class="action-btn cancel-btn">
+
+                                                    <i class="bi bi-x-circle"></i>
+                                                    Cancel
+
+                                                </button>
+
+                                            </form>
+
+                                        {% else %}
+
+                                            <span class="muted">
+                                                No actions
+                                            </span>
+
+                                        {% endif %}
+
+
+                                    {% else %}
+
+                                        {% if reservation.status == 'pending' or reservation.status == 'confirmed' %}
+
+                                            <form
+                                                method="post"
+                                                action="{% url 'reservation_cancel' reservation.pk %}"
+                                                onsubmit="return confirm('Cancel your reservation?');">
+
+                                                {% csrf_token %}
+
+                                                <button
+                                                    type="submit"
+                                                    class="action-btn cancel-btn">
+
+                                                    <i class="bi bi-x-circle"></i>
+                                                    Cancel
+
+                                                </button>
+
+                                            </form>
+
+                                        {% else %}
+
+                                            <span class="muted">
+                                                No actions
+                                            </span>
+
+                                        {% endif %}
+
+                                    {% endif %}
+
+                                </div>
+
+                            </td>
+
+                        </tr>
+
+
+                        {% empty %}
+
+                        <tr>
+
+                            <td colspan="{% if is_admin %}8{% else %}7{% endif %}">
+
+                                <div class="empty">
+
+                                    <i class="bi bi-calendar-x"></i>
+
+                                    <p>No reservations found.</p>
+
+                                </div>
+
+                            </td>
+
+                        </tr>
+
+                        {% endfor %}
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        </section>
+
+
+        <!-- FOOTER -->
+        <footer class="footer">
+
+            &copy; {% now "Y" %} SmartPark
+            &middot; Smart Parking Slot Allocation System
+
+        </footer>
+
+    </main>
+
+</div>
+
+
+<!-- ============ LOGOUT CONFIRMATION MODAL ============ -->
+<div
+    class="modal-overlay"
+    id="logout-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="logout-title"
+    aria-describedby="logout-desc">
+
+    <div class="modal-box">
+
+        <div class="modal-icon">
+            <i class="bi bi-box-arrow-right"></i>
+        </div>
+
+        <h3 id="logout-title">
+            Log out?
+        </h3>
+
+        <p id="logout-desc">
+            Are you sure you want to log out of SmartPark?
+        </p>
+
+        <div class="modal-actions">
+
+            <button
+                type="button"
+                class="btn-cancel"
+                id="logout-cancel">
+
+                Cancel
+
+            </button>
+
+            <button
+                type="button"
+                class="btn-confirm"
+                id="logout-confirm">
+
+                Yes, log out
+
+            </button>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- ============ JAVASCRIPT ============ -->
+<script>
+
+/* =========================================================
+   LOGOUT CONFIRMATION
+   ========================================================= */
+
+(function () {
+
+    const modal = document.getElementById('logout-modal');
+    const openBtn = document.getElementById('logout-open');
+    const cancelBtn = document.getElementById('logout-cancel');
+    const confirmBtn = document.getElementById('logout-confirm');
+    const form = document.getElementById('logout-form');
+
+    function openModal() {
+        modal.classList.add('show');
+        cancelBtn.focus();
+    }
+
+    function closeModal() {
+        modal.classList.remove('show');
+        openBtn.focus();
+    }
+
+    openBtn.addEventListener('click', openModal);
+
+    cancelBtn.addEventListener('click', closeModal);
+
+    confirmBtn.addEventListener('click', function () {
+        form.submit();
+    });
+
+    modal.addEventListener('click', function (e) {
+        if (e.target === modal) {
+            closeModal();
+        }
+    });
+
+    document.addEventListener('keydown', function (e) {
+
+        if (e.key === 'Escape' && modal.classList.contains('show')) {
+            closeModal();
+        }
+
+    });
+
+})();
+
+
+/* =========================================================
+   RESERVATION SEARCH AND STATUS FILTER
+   ========================================================= */
+
+(function () {
+
+    const searchInput = document.getElementById('reservation-search');
+    const statusFilter = document.getElementById('status-filter');
+    const table = document.getElementById('reservation-table');
+
+    if (!searchInput || !statusFilter || !table) {
+        return;
+    }
+
+    const rows = table.querySelectorAll('tbody tr');
+
+    function filterReservations() {
+
+        const search = searchInput.value.toLowerCase().trim();
+        const status = statusFilter.value.toLowerCase();
+
+        rows.forEach(function (row) {
+
+            if (!row.dataset.status) {
+                return;
+            }
+
+            const text = row.textContent.toLowerCase();
+            const rowStatus = row.dataset.status;
+
+            const matchesSearch = text.includes(search);
+            const matchesStatus = !status || rowStatus === status;
+
+            row.style.display =
+                matchesSearch && matchesStatus ? '' : 'none';
+
+        });
+
+    }
+
+    searchInput.addEventListener('input', filterReservations);
+
+    statusFilter.addEventListener('change', filterReservations);
+
+})();
+
+
+/* =========================================================
+   RESERVATION DATE VALIDATION
+   ========================================================= */
+
+(function () {
+
+    const form = document.getElementById('reservation-form');
+
+    if (!form) {
+        return;
+    }
+
+    const startInput = document.getElementById('start-time');
+    const endInput = document.getElementById('end-time');
+
+    // Set minimum date and time to the current local time.
+    function setMinimumDateTime() {
+
+        const now = new Date();
+
+        const localDateTime = new Date(
+            now.getTime() - (now.getTimezoneOffset() * 60000)
+        ).toISOString().slice(0, 16);
+
+        startInput.min = localDateTime;
+        endInput.min = localDateTime;
+
+    }
+
+    setMinimumDateTime();
+
+    startInput.addEventListener('change', function () {
+
+        endInput.min = startInput.value;
+
+        if (endInput.value && endInput.value <= startInput.value) {
+            endInput.value = '';
+        }
+
+    });
+
+    form.addEventListener('submit', function (e) {
+
+        const start = startInput.value;
+        const end = endInput.value;
+
+        if (!start || !end) {
+            e.preventDefault();
+            alert('Please complete your reservation date and time.');
+            return;
+        }
+
+        if (new Date(start) <= new Date()) {
+            e.preventDefault();
+            alert('Reservation start time must be in the future.');
+            return;
+        }
+
+        if (new Date(end) <= new Date(start)) {
+            e.preventDefault();
+            alert('Reservation end time must be later than start time.');
+            return;
+        }
+
+        const submitBtn = document.getElementById('reservation-submit');
+
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML =
+                '<i class="bi bi-hourglass-split"></i> Submitting...';
+        }
+
+    });
+
+})();
+
+
+/* =========================================================
+   AUTO-HIDE FLASH MESSAGES
+   ========================================================= */
+
+(function () {
+
+    const toasts = document.querySelectorAll('.toast');
+
+    toasts.forEach(function (toast) {
+
+        setTimeout(function () {
+
+            toast.classList.add('hide');
+
+            setTimeout(function () {
+                toast.remove();
+            }, 450);
+
+        }, 6000);
+
+    });
+
+})();
+
+</script>
+<script src="{% static 'js/notifications.js' %}"></script>
+</body>
+</html>

@@ -1,0 +1,292 @@
+/* ==========================================================================
+   SmartPark - parking_slot.css
+   Put this file in: <your_app>/static/css/parking_slot.css
+
+   Styles used only by the Parking Slots page. Load it AFTER dashboard.css
+   so these rules sit on top of the shared dashboard styles.
+   ========================================================================== */
+
+/* ---------- Top bar: push user + Log out to the right ---------- */
+.topbar {
+    display: flex;
+    align-items: center;
+}
+
+.topbar-title {
+    flex: 1;
+}
+
+.topbar-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+/* ---------- Toolbar / filters ---------- */
+.ps-toolbar {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    margin-bottom: 18px;
+}
+
+.ps-toolbar .field {
+    flex: 1 1 160px;
+    min-width: 150px;
+}
+
+.ps-btn-ghost {
+    padding: 12px 18px;
+    border-radius: 12px;
+    border: 1px solid #e6e9f2;
+    background: #fff;
+    font: inherit;
+    font-weight: 700;
+    color: #1e2433;
+    cursor: pointer;
+    display: inline-block;
+}
+
+.ps-btn-ghost:hover {
+    background: #f4f6fb;
+}
+
+/* ---------- Collapsible "Add zone / Add slot" cards ---------- */
+.ps-add summary {
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 800;
+    font-size: 16px;
+}
+
+.ps-add summary::-webkit-details-marker {
+    display: none;
+}
+
+.ps-add summary .chev {
+    margin-left: auto;
+    transition: transform 0.2s;
+    color: #7b8498;
+}
+
+.ps-add[open] summary .chev {
+    transform: rotate(180deg);
+}
+
+.ps-add form {
+    margin-top: 18px;
+}
+
+.ps-add .field-row {
+    flex-wrap: wrap;
+}
+
+.ps-add .field-row .field {
+    min-width: 160px;
+}
+
+/* ---------- Flash messages ---------- */
+.ps-msg {
+    padding: 12px 18px;
+    border-radius: 12px;
+    font-weight: 600;
+    margin-bottom: 12px;
+}
+
+.ps-msg.success { background: #e3f8ea; color: #15803d; }
+.ps-msg.error   { background: #fdebeb; color: #b91c1c; }
+.ps-msg.warning { background: #fff3de; color: #b45309; }
+.ps-msg.info    { background: #eaeefe; color: #3c56d6; }
+
+/* ---------- Status pills ---------- */
+.ps-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.ps-status::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.ps-status.available   { background: #e3f8ea; color: #15803d; }
+.ps-status.occupied    { background: #fdebeb; color: #b91c1c; }
+.ps-status.reserved    { background: #fff3de; color: #b45309; }
+.ps-status.maintenance { background: #eceef4; color: #667085; }
+.ps-status.inactive    { background: #eceef4; color: #667085; }
+
+/* ---------- Table cells ---------- */
+.ps-type {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #4a5468;
+}
+
+.ps-slotno {
+    font-weight: 800;
+    font-size: 15px;
+}
+
+.ps-count {
+    color: #7b8498;
+    font-size: 13px;
+}
+
+.ps-section-gap {
+    margin-top: 18px;
+}
+
+/* ---------- Row action buttons ---------- */
+.ps-act {
+    display: inline-block;
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 0;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.ps-act.warn   { background: #fff3de; color: #b45309; }
+.ps-act.ok     { background: #e3f8ea; color: #15803d; }
+.ps-act.danger { background: #fdebeb; color: #b91c1c; }
+.ps-act.rel    { background: #eaeefe; color: #3c56d6; }
+
+.ps-act:hover {
+    filter: brightness(0.95);
+}
+
+.ps-actions {
+    display: inline-flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.ps-actions form {
+    margin: 0;
+    display: inline;
+}
+
+.ps-locked {
+    color: #9aa3b5;
+    font-size: 12px;
+}
+
+/* ---------- Live indicator ---------- */
+.ps-live {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    color: #64748b;
+    margin-left: 10px;
+}
+
+.ps-live i {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #22c55e;
+    animation: psPulse 1.6s infinite;
+}
+
+.ps-live.offline i {
+    background: #ef4444;
+    animation: none;
+}
+
+@keyframes psPulse {
+    0%   { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.55); }
+    70%  { box-shadow: 0 0 0 7px rgba(34, 197, 94, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+
+/* ---------- Logout confirmation modal ---------- */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(3px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    z-index: 1000;
+}
+
+.modal-overlay.show {
+    display: flex;
+}
+
+.modal-box {
+    background: #fff;
+    width: 100%;
+    max-width: 380px;
+    border-radius: 18px;
+    padding: 28px 24px 22px;
+    text-align: center;
+    box-shadow: 0 20px 50px rgba(15, 23, 42, 0.25);
+    font-family: 'Plus Jakarta Sans', sans-serif;
+}
+
+.modal-icon {
+    width: 56px;
+    height: 56px;
+    margin: 0 auto 14px;
+    border-radius: 50%;
+    background: #fee2e2;
+    color: #dc2626;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+}
+
+.modal-box h3 {
+    margin: 0 0 6px;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.modal-box p {
+    margin: 0 0 22px;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: #64748b;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.modal-actions button {
+    flex: 1;
+    padding: 11px 14px;
+    border-radius: 10px;
+    border: 0;
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.btn-cancel  { background: #f1f5f9; color: #334155; }
+.btn-confirm { background: #dc2626; color: #fff; }

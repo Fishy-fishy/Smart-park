@@ -1,0 +1,981 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Administrator Requests | SmartPark</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+    <!-- dashboard.css first, then page-specific styles -->
+    <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+    <link rel="stylesheet" href="{% static 'css/admin_request.css' %}">
+    <link rel="stylesheet" href="{% static 'css/notifications.css' %}">
+</head>
+
+<body>
+
+<div class="app">
+
+    <!-- ================= SIDEBAR ================= -->
+    <aside class="sidebar" id="sidebar">
+
+        <div class="brand">
+            <div class="brand-logo"><i class="bi bi-p-square-fill"></i></div>
+            <div>
+                <h1>SmartPark</h1>
+                <span>Slot Allocation System</span>
+            </div>
+        </div>
+
+        <nav class="nav">
+            <p class="nav-label">Main</p>
+            <a href="{% url 'admin_request' %}" class="nav-link active"><i class="bi bi-person-gear"></i> Admins &amp; Drivers</a>
+            <a href="{% url 'parking_slot' %}" class="nav-link"><i class="bi bi-map"></i> Parking Slots</a>
+            <a href="{% url 'vehicles' %}" class="nav-link"><i class="bi bi-car-front"></i> Vehicles</a>
+            <a href="{% url 'reservation' %}" class="nav-link"><i class="bi bi-calendar2-check"></i> Reservations</a>
+
+            <p class="nav-label">Management</p>
+            
+            <a href="{% url 'allocation_history' %}" class="nav-link"><i class="bi bi-clock-history"></i> Allocation History</a>
+            <a href="#" class="nav-link"><i class="bi bi-credit-card"></i> Payments</a>
+            <a href="#" class="nav-link"><i class="bi bi-bar-chart-line"></i> Reports</a>
+        </nav>
+
+        
+
+    </aside>
+
+    <!-- ================= MAIN CONTENT ================= -->
+    <main class="main">
+
+        <!-- TOPBAR -->
+        <header class="topbar">
+            <button class="icon-btn menu-btn" type="button"
+                    onclick="document.getElementById('sidebar').classList.toggle('open')"
+                    aria-label="Toggle menu">
+                <i class="bi bi-list"></i>
+            </button>
+
+            <div class="topbar-title">
+                <h2>Administrator Requests</h2>
+                <p>Review and manage requests</p>
+            </div>
+
+            <div class="topbar-actions">
+                <div class="notif-wrap" id="notif-wrap"
+     data-url="{% url 'notifications_data' %}"
+     data-user="{{ request.user.pk }}">
+    <button type="button" class="notif-btn" id="notif-btn" aria-label="Notifications" aria-expanded="false">
+        <i class="bi bi-bell"></i>
+        <span class="notif-dot" id="notif-dot" hidden></span>
+    </button>
+
+    <div class="notif-panel" id="notif-panel" role="region" aria-label="Notifications">
+        <div class="notif-head">
+            <div>
+                <strong>Notifications</strong>
+                <span class="notif-count" id="notif-count" hidden></span>
+            </div>
+            <button type="button" id="notif-read-all">Mark all as read</button>
+        </div>
+        <ul class="notif-list" id="notif-list">
+            <li class="notif-empty">Loading...</li>
+        </ul>
+    </div>
+</div>
+
+                <div class="user">
+                    <div class="avatar">{{ request.user.username|slice:":1"|upper }}</div>
+                    <div class="user-info">
+                        <strong>{{ request.user.get_full_name|default:request.user.username }}</strong>
+                        <span>Administrator</span>
+                    </div>
+                </div>
+
+                <form method="post" action="{% url 'logout' %}" class="logout-form" id="logoutForm">
+                    {% csrf_token %}
+                    <button type="button" class="logout-btn" id="logoutButton" title="Log out">
+                        <i class="bi bi-box-arrow-right"></i> <span>Log out</span>
+                    </button>
+                </form>
+            </div>
+        </header>
+
+        <!-- MESSAGES -->
+        {% if messages %}
+        <div class="messages-container">
+            {% for message in messages %}
+            <div class="message {{ message.tags }}">
+                <span>{{ message }}</span>
+                <button type="button"
+                        class="close-message"
+                        onclick="this.parentElement.remove()">
+                    &times;
+                </button>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- ================= STATISTICS ================= -->
+        <section class="stats">
+
+            <article class="stat">
+                <div class="stat-icon amber">
+                    <i class="bi bi-hourglass-split"></i>
+                </div>
+                <div>
+                    <span>Pending Requests</span>
+                    <h3>{{ pending_count }}</h3>
+                </div>
+            </article>
+
+            <article class="stat">
+                <div class="stat-icon green">
+                    <i class="bi bi-person-check"></i>
+                </div>
+                <div>
+                    <span>Approved Administrators</span>
+                    <h3>{{ approved_admins|length }}</h3>
+                </div>
+            </article>
+
+            <article class="stat">
+                <div class="stat-icon red">
+                    <i class="bi bi-person-x"></i>
+                </div>
+                <div>
+                    <span>Rejected Requests</span>
+                    <h3>{{ rejected_admins|length }}</h3>
+                </div>
+            </article>
+
+            <article class="stat">
+                <div class="stat-icon blue">
+                    <i class="bi bi-people"></i>
+                </div>
+                <div>
+                    <span>Total Administrators</span>
+                    <h3>{{ total_admins }}</h3>
+                </div>
+            </article>
+
+        </section>
+
+        <!-- ================= PENDING ================= -->
+        <section class="card">
+
+            <div class="card-head">
+                <div>
+                    <h3>Pending Administrator Requests</h3>
+                    <p class="muted">Review administrator registration applications.</p>
+                </div>
+
+                <span class="badge" style="background:#fef3c7;color:#b45309;">
+                    {{ pending_count }} Pending
+                </span>
+            </div>
+
+            <div class="table-wrap">
+                <table class="table">
+
+                    <thead>
+                        <tr>
+                            <th>Administrator</th>
+                            <th>Username</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th>Date Registered</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {% for admin in pending_admins %}
+                        <tr>
+                            <td>
+                                <div class="cell-vehicle">
+                                    <strong>
+                                        {{ admin.user.first_name }} {{ admin.user.last_name }}
+                                    </strong>
+                                    <small>Administrator Applicant</small>
+                                </div>
+                            </td>
+
+                            <td>{{ admin.user.username }}</td>
+                            <td>{{ admin.user.email|default:"Not provided" }}</td>
+                            <td>{{ admin.phone|default:"Not provided" }}</td>
+                            <td>{{ admin.created_at|date:"M d, Y" }}</td>
+
+                            <td>
+                                <div class="actions">
+
+                                    <form method="POST"
+                                          action="{% url 'approve_admin' admin.id %}">
+                                        {% csrf_token %}
+                                        <button type="submit" class="approve-btn">
+                                            <i class="fas fa-check"></i> Approve
+                                        </button>
+                                    </form>
+
+                                    <form method="POST"
+                                          action="{% url 'reject_admin' admin.id %}"
+                                          onsubmit="return confirm('Are you sure you want to reject this administrator request?');">
+                                        {% csrf_token %}
+                                        <button type="submit" class="reject-btn">
+                                            <i class="fas fa-times"></i> Reject
+                                        </button>
+                                    </form>
+
+                                </div>
+                            </td>
+                        </tr>
+
+                        {% empty %}
+                        <tr>
+                            <td colspan="6">
+                                <div class="empty-state">
+                                    <i class="bi bi-inbox"></i>
+                                    <h3>No Pending Requests</h3>
+                                    <p>There are currently no administrator registration requests.</p>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+
+                </table>
+            </div>
+        </section>
+
+        <!-- ================= APPROVED ================= -->
+        <section class="card">
+
+            <div class="card-head">
+                <div>
+                    <h3>Approved Administrators</h3>
+                    <p class="muted">View and manage approved administrator accounts.</p>
+                </div>
+
+                <span class="badge active">
+                    {{ approved_admins|length }} Approved
+                </span>
+            </div>
+
+            <div class="table-wrap">
+                <table class="table">
+
+                    <thead>
+                        <tr>
+                            <th>Administrator</th>
+                            <th>Username</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th>Status</th>
+
+                            {% if request.user.profile.is_main_admin %}
+                            <th>Actions</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {% for admin in approved_admins %}
+                        <tr>
+                            <td>
+                                <div class="administrator-name">
+                                    <div class="small-avatar">
+                                        {{ admin.user.username|first|upper }}
+                                    </div>
+                                    <span>
+                                        {{ admin.user.first_name }} {{ admin.user.last_name }}
+                                    </span>
+                                </div>
+                            </td>
+
+                            <td>{{ admin.user.username }}</td>
+                            <td>{{ admin.user.email|default:"Not provided" }}</td>
+                            <td>{{ admin.phone|default:"Not provided" }}</td>
+
+                            <td>
+                                {% if admin.is_main_admin %}
+                                    <span class="status-badge main-badge">Main Admin</span>
+                                {% else %}
+                                    <span class="status-badge approved">Approved</span>
+                                {% endif %}
+                            </td>
+
+                            {% if request.user.profile.is_main_admin %}
+                            <td>
+                                {% if not admin.is_main_admin %}
+
+                                <div class="action-buttons">
+
+                                    <button type="button"
+                                            class="action-btn edit-btn js-open-edit"
+                                            title="Edit Administrator"
+                                            data-action="{% url 'edit_user' admin.id %}"
+                                            data-username="{{ admin.user.username }}"
+                                            data-first-name="{{ admin.user.first_name }}"
+                                            data-last-name="{{ admin.user.last_name }}"
+                                            data-email="{{ admin.user.email }}"
+                                            data-phone="{{ admin.phone|default:'' }}">
+                                        <i class="fas fa-edit"></i> Edit
+                                    </button>
+
+                                    <button type="button"
+                                            class="action-btn password-btn js-open-password"
+                                            title="Change Administrator Password"
+                                            data-action="{% url 'change_user_password' admin.id %}"
+                                            data-username="{{ admin.user.username }}">
+                                        <i class="fas fa-key"></i> Password
+                                    </button>
+
+                                    <form method="POST"
+                                          action="{% url 'delete_user' admin.id %}"
+                                          onsubmit="return confirm('Are you sure you want to permanently delete the administrator account {{ admin.user.username|escapejs }}?');">
+                                        {% csrf_token %}
+
+                                        <button type="submit"
+                                                class="action-btn delete-btn"
+                                                title="Delete Administrator">
+                                            <i class="fas fa-trash"></i> Delete
+                                        </button>
+                                    </form>
+
+                                </div>
+
+                                {% else %}
+                                    <span class="protected-label">
+                                        <i class="fas fa-lock"></i> Protected Account
+                                    </span>
+                                {% endif %}
+                            </td>
+                            {% endif %}
+
+                        </tr>
+
+                        {% empty %}
+                        <tr>
+                            <td colspan="6">
+                                <div class="empty-state">
+                                    <i class="bi bi-people"></i>
+                                    <h3>No Approved Administrators</h3>
+                                    <p>Approved administrator accounts will appear here.</p>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+
+                </table>
+            </div>
+        </section>
+
+        <!-- ================= REJECTED ================= -->
+        <section class="card">
+
+            <div class="card-head">
+                <div>
+                    <h3>Rejected Administrator Requests</h3>
+                    <p class="muted">View administrator registration requests that were rejected.</p>
+                </div>
+
+                <span class="badge" style="background:#fee2e2;color:#dc2626;">
+                    {{ rejected_admins|length }} Rejected
+                </span>
+            </div>
+
+            <div class="table-wrap">
+                <table class="table">
+
+                    <thead>
+                        <tr>
+                            <th>Administrator</th>
+                            <th>Username</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th>Date Registered</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {% for admin in rejected_admins %}
+                        <tr>
+                            <td>
+                                <div class="cell-vehicle">
+                                    <strong>
+                                        {{ admin.user.first_name }} {{ admin.user.last_name }}
+                                    </strong>
+                                    <small>Administrator Applicant</small>
+                                </div>
+                            </td>
+
+                            <td>{{ admin.user.username }}</td>
+                            <td>{{ admin.user.email|default:"Not provided" }}</td>
+                            <td>{{ admin.phone|default:"Not provided" }}</td>
+                            <td>{{ admin.created_at|date:"M d, Y" }}</td>
+                            <td>
+                                <span class="status-badge rejected">Rejected</span>
+                            </td>
+                        </tr>
+
+                        {% empty %}
+                        <tr>
+                            <td colspan="6">
+                                <div class="empty-state">
+                                    <i class="bi bi-person-x"></i>
+                                    <h3>No Rejected Requests</h3>
+                                    <p>There are currently no rejected administrator requests.</p>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+
+                </table>
+            </div>
+        </section>
+
+        <!-- ================= DRIVERS ================= -->
+        {% if request.user.profile.is_main_admin %}
+
+        <section class="card" id="drivers">
+
+            <div class="card-head">
+                <div>
+                    <h3>Driver Accounts</h3>
+                    <p class="muted">
+                        View, edit, change the password of, or delete driver accounts.
+                    </p>
+                </div>
+
+                <span class="badge active">
+                    {{ driver_profiles|length }} Drivers
+                </span>
+            </div>
+
+            <div class="search-box">
+                <input type="text"
+                       id="driverSearch"
+                       placeholder="Search drivers by name, username or email...">
+            </div>
+
+            <div class="table-wrap">
+                <table class="table" id="driverTable">
+
+                    <thead>
+                        <tr>
+                            <th>Driver</th>
+                            <th>Username</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th>Date Registered</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {% for driver in driver_profiles %}
+                        <tr>
+                            <td>
+                                <div class="administrator-name">
+                                    <div class="small-avatar">
+                                        {{ driver.user.username|first|upper }}
+                                    </div>
+                                    <span>
+                                        {{ driver.user.first_name }} {{ driver.user.last_name }}
+                                    </span>
+                                </div>
+                            </td>
+
+                            <td>{{ driver.user.username }}</td>
+                            <td>{{ driver.user.email|default:"Not provided" }}</td>
+                            <td>{{ driver.phone|default:"Not provided" }}</td>
+                            <td>{{ driver.created_at|date:"M d, Y" }}</td>
+
+                            <td>
+                                <div class="action-buttons">
+
+                                    <button type="button"
+                                            class="action-btn edit-btn js-open-edit"
+                                            title="Edit Driver"
+                                            data-action="{% url 'edit_user' driver.id %}"
+                                            data-username="{{ driver.user.username }}"
+                                            data-first-name="{{ driver.user.first_name }}"
+                                            data-last-name="{{ driver.user.last_name }}"
+                                            data-email="{{ driver.user.email }}"
+                                            data-phone="{{ driver.phone|default:'' }}">
+                                        <i class="fas fa-edit"></i> Edit
+                                    </button>
+
+                                    <button type="button"
+                                            class="action-btn password-btn js-open-password"
+                                            title="Change Driver Password"
+                                            data-action="{% url 'change_user_password' driver.id %}"
+                                            data-username="{{ driver.user.username }}">
+                                        <i class="fas fa-key"></i> Password
+                                    </button>
+
+                                    <form method="POST"
+                                          action="{% url 'delete_user' driver.id %}"
+                                          onsubmit="return confirm('Are you sure you want to permanently delete the driver account {{ driver.user.username|escapejs }}?');">
+                                        {% csrf_token %}
+
+                                        <button type="submit"
+                                                class="action-btn delete-btn"
+                                                title="Delete Driver">
+                                            <i class="fas fa-trash"></i> Delete
+                                        </button>
+                                    </form>
+
+                                </div>
+                            </td>
+                        </tr>
+
+                        {% empty %}
+                        <tr>
+                            <td colspan="6">
+                                <div class="empty-state">
+                                    <i class="bi bi-car-front"></i>
+                                    <h3>No Driver Accounts</h3>
+                                    <p>Registered driver accounts will appear here.</p>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+
+                </table>
+            </div>
+        </section>
+
+        {% endif %}
+
+        <!-- FOOTER -->
+        <footer class="footer">
+            &copy; {% now "Y" %} SmartPark &middot; Smart Parking Slot Allocation System
+        </footer>
+
+    </main>
+</div>
+
+
+<!-- ================= LOGOUT CONFIRMATION MODAL ================= -->
+<div class="logout-modal" id="logoutModal">
+
+    <div class="logout-modal-content">
+
+        <div class="logout-icon">
+            <i class="bi bi-box-arrow-right"></i>
+        </div>
+
+        <h3>Log out?</h3>
+
+        <p>
+            Are you sure you want to log out of SmartPark?
+        </p>
+
+        <div class="logout-buttons">
+
+            <button type="button"
+                    class="logout-cancel"
+                    id="cancelLogout">
+                Cancel
+            </button>
+
+            <button type="button"
+                    class="logout-confirm"
+                    id="confirmLogout">
+                Yes, log out
+            </button>
+
+        </div>
+
+    </div>
+</div>
+
+
+{% if request.user.profile.is_main_admin %}
+
+<!-- ================= EDIT ACCOUNT MODAL ================= -->
+<div class="modal-overlay" id="editModal">
+
+    <div class="modal-box">
+
+        <div class="modal-header">
+            <div>
+                <h3>Edit Account</h3>
+                <p>Update the account details below.</p>
+            </div>
+
+            <button type="button"
+                    class="modal-close"
+                    data-close="editModal"
+                    aria-label="Close">
+                &times;
+            </button>
+        </div>
+
+        <div class="modal-body">
+
+            <form method="POST" id="editForm" action="">
+                {% csrf_token %}
+
+                <div class="form-group">
+                    <label for="edit_username">Username</label>
+                    <input type="text"
+                           id="edit_username"
+                           name="username"
+                           required>
+                </div>
+
+                <div class="form-row">
+
+                    <div class="form-group">
+                        <label for="edit_first_name">First Name</label>
+                        <input type="text"
+                               id="edit_first_name"
+                               name="first_name">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="edit_last_name">Last Name</label>
+                        <input type="text"
+                               id="edit_last_name"
+                               name="last_name">
+                    </div>
+
+                </div>
+
+                <div class="form-group">
+                    <label for="edit_email">Email Address</label>
+                    <input type="email"
+                           id="edit_email"
+                           name="email"
+                           required>
+                </div>
+
+                <div class="form-group">
+                    <label for="edit_phone">Phone</label>
+                    <input type="text"
+                           id="edit_phone"
+                           name="phone">
+                </div>
+
+                <div class="modal-actions">
+
+                    <button type="button"
+                            class="btn-secondary"
+                            data-close="editModal">
+                        Cancel
+                    </button>
+
+                    <button type="submit" class="btn-primary">
+                        <i class="bi bi-check2-circle"></i> Save Changes
+                    </button>
+
+                </div>
+            </form>
+
+        </div>
+    </div>
+</div>
+
+
+<!-- ================= CHANGE PASSWORD MODAL ================= -->
+<div class="modal-overlay" id="passwordModal">
+
+    <div class="modal-box">
+
+        <div class="modal-header">
+            <div>
+                <h3>Change Password</h3>
+                <p>
+                    Set a new password for
+                    <strong id="pwd_username"></strong>.
+                </p>
+            </div>
+
+            <button type="button"
+                    class="modal-close"
+                    data-close="passwordModal"
+                    aria-label="Close">
+                &times;
+            </button>
+        </div>
+
+        <div class="modal-body">
+
+            <form method="POST" id="passwordForm" action="">
+                {% csrf_token %}
+
+                <div class="form-group">
+                    <label for="pwd_new1">New Password</label>
+
+                    <input type="password"
+                           id="pwd_new1"
+                           name="new_password1"
+                           autocomplete="new-password"
+                           required>
+
+                    <span class="field-hint">
+                        At least 8 characters. Avoid common or all-numeric passwords.
+                    </span>
+                </div>
+
+                <div class="form-group">
+                    <label for="pwd_new2">Confirm New Password</label>
+
+                    <input type="password"
+                           id="pwd_new2"
+                           name="new_password2"
+                           autocomplete="new-password"
+                           required>
+                </div>
+
+                <p class="field-error" id="pwdError"></p>
+
+                <div class="modal-actions">
+
+                    <button type="button"
+                            class="btn-secondary"
+                            data-close="passwordModal">
+                        Cancel
+                    </button>
+
+                    <button type="submit" class="btn-primary">
+                        <i class="bi bi-key"></i> Change Password
+                    </button>
+
+                </div>
+
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endif %}
+
+
+<script>
+(function () {
+
+    /* ================= LOGOUT CONFIRMATION ================= */
+
+    const logoutForm = document.getElementById("logoutForm");
+    const logoutButton = document.getElementById("logoutButton");
+    const logoutModal = document.getElementById("logoutModal");
+    const cancelLogout = document.getElementById("cancelLogout");
+    const confirmLogout = document.getElementById("confirmLogout");
+
+    logoutButton.addEventListener("click", function () {
+        logoutModal.classList.add("open");
+        cancelLogout.focus();
+    });
+
+    cancelLogout.addEventListener("click", function () {
+        logoutModal.classList.remove("open");
+    });
+
+    confirmLogout.addEventListener("click", function () {
+        logoutForm.submit();
+    });
+
+    logoutModal.addEventListener("click", function (e) {
+        if (e.target === logoutModal) {
+            logoutModal.classList.remove("open");
+        }
+    });
+
+
+    /* ================= ADMIN AND DRIVER MODALS ================= */
+
+    const editModal = document.getElementById("editModal");
+    const passwordModal = document.getElementById("passwordModal");
+
+    function openModal(modal) {
+        if (modal) {
+            modal.classList.add("open");
+        }
+    }
+
+    function closeModal(modal) {
+        if (modal) {
+            modal.classList.remove("open");
+        }
+    }
+
+    // EDIT ACCOUNT
+    document.querySelectorAll(".js-open-edit").forEach(function (btn) {
+
+        btn.addEventListener("click", function () {
+
+            document.getElementById("editForm").action = btn.dataset.action;
+
+            document.getElementById("edit_username").value =
+                btn.dataset.username || "";
+
+            document.getElementById("edit_first_name").value =
+                btn.dataset.firstName || "";
+
+            document.getElementById("edit_last_name").value =
+                btn.dataset.lastName || "";
+
+            document.getElementById("edit_email").value =
+                btn.dataset.email || "";
+
+            document.getElementById("edit_phone").value =
+                btn.dataset.phone || "";
+
+            openModal(editModal);
+        });
+
+    });
+
+
+    // CHANGE PASSWORD
+    document.querySelectorAll(".js-open-password").forEach(function (btn) {
+
+        btn.addEventListener("click", function () {
+
+            document.getElementById("passwordForm").action =
+                btn.dataset.action;
+
+            document.getElementById("pwd_username").textContent =
+                btn.dataset.username || "";
+
+            document.getElementById("pwd_new1").value = "";
+            document.getElementById("pwd_new2").value = "";
+
+            const error = document.getElementById("pwdError");
+            error.style.display = "none";
+            error.textContent = "";
+
+            openModal(passwordModal);
+        });
+
+    });
+
+
+    // CONFIRM PASSWORD CHECK
+    const passwordForm = document.getElementById("passwordForm");
+
+    if (passwordForm) {
+
+        passwordForm.addEventListener("submit", function (e) {
+
+            const password1 =
+                document.getElementById("pwd_new1").value;
+
+            const password2 =
+                document.getElementById("pwd_new2").value;
+
+            const error =
+                document.getElementById("pwdError");
+
+            if (password1 !== password2) {
+
+                e.preventDefault();
+
+                error.textContent =
+                    "The two password fields do not match.";
+
+                error.style.display = "block";
+            }
+
+        });
+
+    }
+
+
+    // DRIVER SEARCH
+    const searchInput = document.getElementById("driverSearch");
+
+    if (searchInput) {
+
+        searchInput.addEventListener("input", function () {
+
+            const query = searchInput.value.toLowerCase();
+
+            document.querySelectorAll("#driverTable tbody tr").forEach(function (row) {
+
+                row.style.display =
+                    row.textContent.toLowerCase().includes(query) ? "" : "none";
+
+            });
+
+        });
+
+    }
+
+
+    // CLOSE BUTTONS
+    document.querySelectorAll("[data-close]").forEach(function (el) {
+
+        el.addEventListener("click", function () {
+
+            closeModal(document.getElementById(el.dataset.close));
+
+        });
+
+    });
+
+
+    // CLOSE WHEN CLICKING OUTSIDE
+    [editModal, passwordModal].forEach(function (modal) {
+
+        if (modal) {
+
+            modal.addEventListener("click", function (e) {
+
+                if (e.target === modal) {
+                    closeModal(modal);
+                }
+
+            });
+
+        }
+
+    });
+
+
+    // ESCAPE KEY
+    document.addEventListener("keydown", function (e) {
+
+        if (e.key === "Escape") {
+
+            closeModal(editModal);
+            closeModal(passwordModal);
+
+            logoutModal.classList.remove("open");
+
+        }
+
+    });
+
+
+    /* ================= AUTO-HIDE FLASH MESSAGES ================= */
+
+    document.querySelectorAll(".message").forEach(function (msg) {
+
+        setTimeout(function () {
+            msg.style.transition = "opacity .4s";
+            msg.style.opacity = "0";
+            setTimeout(function () { msg.remove(); }, 450);
+        }, 6000);
+
+    });
+
+})();
+</script>
+<script src="{% static 'js/notifications.js' %}"></script>
+</body>
+</html>

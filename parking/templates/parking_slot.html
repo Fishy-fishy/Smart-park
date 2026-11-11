@@ -1,0 +1,663 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parking Slots | SmartPark</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+    <link rel="stylesheet" href="{% static 'css/parking_slot.css' %}">
+    <link rel="stylesheet" href="{% static 'css/notifications.css' %}">
+    
+    <!-- Styles only used on this page -->
+    <style>
+        .ps-toolbar { display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end; margin-bottom:18px; }
+        .ps-toolbar .field { flex:1 1 160px; min-width:150px; }
+        .ps-btn-ghost {
+            padding:12px 18px; border-radius:12px; border:1px solid #e6e9f2; background:#fff;
+            font:inherit; font-weight:700; color:#1e2433; cursor:pointer; display:inline-block;
+        }
+        .ps-btn-ghost:hover { background:#f4f6fb; }
+
+        .ps-add summary {
+            list-style:none; cursor:pointer; display:flex; align-items:center; gap:10px;
+            font-weight:800; font-size:16px;
+        }
+        .ps-add summary::-webkit-details-marker { display:none; }
+        .ps-add summary .chev { margin-left:auto; transition:transform .2s; color:#7b8498; }
+        .ps-add[open] summary .chev { transform:rotate(180deg); }
+        .ps-add form { margin-top:18px; }
+        .ps-add .field-row { flex-wrap:wrap; }
+        .ps-add .field-row .field { min-width:160px; }
+
+        .ps-msg { padding:12px 18px; border-radius:12px; font-weight:600; margin-bottom:12px; }
+        .ps-msg.success { background:#e3f8ea; color:#15803d; }
+        .ps-msg.error   { background:#fdebeb; color:#b91c1c; }
+        .ps-msg.warning { background:#fff3de; color:#b45309; }
+        .ps-msg.info    { background:#eaeefe; color:#3c56d6; }
+
+        .ps-status { display:inline-flex; align-items:center; gap:6px; padding:4px 12px; border-radius:999px; font-size:12px; font-weight:700; }
+        .ps-status::before { content:""; width:8px; height:8px; border-radius:50%; background:currentColor; }
+        .ps-status.available   { background:#e3f8ea; color:#15803d; }
+        .ps-status.occupied    { background:#fdebeb; color:#b91c1c; }
+        .ps-status.reserved    { background:#fff3de; color:#b45309; }
+        .ps-status.maintenance { background:#eceef4; color:#667085; }
+        .ps-status.inactive    { background:#eceef4; color:#667085; }
+
+        .ps-type { display:inline-flex; align-items:center; gap:6px; color:#4a5468; }
+        .ps-slotno { font-weight:800; font-size:15px; }
+        .ps-act { display:inline-block; padding:6px 12px; border-radius:8px; border:0; font:inherit; font-size:12px; font-weight:700; cursor:pointer; }
+        .ps-act.warn   { background:#fff3de; color:#b45309; }
+        .ps-act.ok     { background:#e3f8ea; color:#15803d; }
+        .ps-act.danger { background:#fdebeb; color:#b91c1c; }
+        .ps-act.rel    { background:#eaeefe; color:#3c56d6; }
+        .ps-act:hover { filter:brightness(.95); }
+        .ps-actions { display:inline-flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+        .ps-actions form { margin:0; display:inline; }
+        .ps-locked { color:#9aa3b5; font-size:12px; }
+        .ps-count { color:#7b8498; font-size:13px; }
+        .ps-section-gap { margin-top:18px; }
+
+        .ps-live { display:inline-flex; align-items:center; gap:6px; font-size:.78rem; color:#64748b; margin-left:10px; }
+        .ps-live i { width:8px; height:8px; border-radius:50%; background:#22c55e; animation:psPulse 1.6s infinite; }
+        .ps-live.offline i { background:#ef4444; animation:none; }
+        @keyframes psPulse {
+            0%   { box-shadow:0 0 0 0 rgba(34,197,94,.55); }
+            70%  { box-shadow:0 0 0 7px rgba(34,197,94,0); }
+            100% { box-shadow:0 0 0 0 rgba(34,197,94,0); }
+        }
+
+        /* Logout confirmation */
+        .modal-overlay {
+            position:fixed; inset:0; background:rgba(15,23,42,.55); backdrop-filter:blur(3px);
+            display:none; align-items:center; justify-content:center; padding:16px; z-index:1000;
+        }
+        .modal-overlay.show { display:flex; }
+        .modal-box {
+            background:#fff; width:100%; max-width:380px; border-radius:18px; padding:28px 24px 22px;
+            text-align:center; box-shadow:0 20px 50px rgba(15,23,42,.25); font-family:'Plus Jakarta Sans',sans-serif;
+        }
+        .modal-icon {
+            width:56px; height:56px; margin:0 auto 14px; border-radius:50%; background:#fee2e2; color:#dc2626;
+            display:flex; align-items:center; justify-content:center; font-size:26px;
+        }
+        .modal-box h3 { margin:0 0 6px; font-size:1.15rem; font-weight:700; color:#0f172a; }
+        .modal-box p  { margin:0 0 22px; font-size:.9rem; line-height:1.5; color:#64748b; }
+        .modal-actions { display:flex; gap:10px; }
+        .modal-actions button {
+            flex:1; padding:11px 14px; border-radius:10px; border:0; font-family:inherit;
+            font-size:.9rem; font-weight:600; cursor:pointer;
+        }
+        .btn-cancel  { background:#f1f5f9; color:#334155; }
+        .btn-confirm { background:#dc2626; color:#fff; }
+    </style>
+</head>
+<body>
+
+<div class="app">
+
+    <!-- ============ SIDEBAR ============ -->
+    <aside class="sidebar" id="sidebar">
+        <div class="brand">
+            <div class="brand-logo"><i class="bi bi-p-square-fill"></i></div>
+            <div>
+                <h1>SmartPark</h1>
+                <span>Slot Allocation System</span>
+            </div>
+        </div>
+
+        <nav class="nav">
+    <p class="nav-label">Main</p>
+
+    {% if is_admin %}
+        <a href="{% url 'admin_request' %}" class="nav-link"><i class="bi bi-person-gear"></i> Admins &amp; Drivers</a>
+    {% else %}
+        <a href="{% url 'driver_home' %}" class="nav-link"><i class="bi bi-grid-1x2-fill"></i> Dashboard</a>
+    {% endif %}
+
+    <a href="{% url 'parking_slot' %}" class="nav-link active"><i class="bi bi-map"></i> Parking Slots</a>
+    <a href="{% url 'vehicles' %}" class="nav-link"><i class="bi bi-car-front"></i> {% if is_admin %}Vehicles{% else %}My Vehicles{% endif %}</a>
+    <a href="{% url 'reservation' %}" class="nav-link"><i class="bi bi-calendar2-check"></i> Reservations</a>
+
+    <p class="nav-label">Management</p>
+    {% if is_admin %}
+        <a href="{% url 'allocation_history' %}" class="nav-link"><i class="bi bi-clock-history"></i> Allocation History</a>
+    {% else %}
+        <a href="{% url 'my_history' %}" class="nav-link"><i class="bi bi-clock-history"></i> My History</a>
+    {% endif %}
+    <a href="#" class="nav-link"><i class="bi bi-credit-card"></i> Payments</a>
+    <a href="#" class="nav-link"><i class="bi bi-bar-chart-line"></i> Reports</a>
+    <a href="#" class="nav-link"><i class="bi bi-gear"></i> Settings</a>
+</nav>
+          
+    </aside>
+
+    <!-- ============ MAIN ============ -->
+    <main class="main">
+
+        <header class="topbar">
+            <button class="icon-btn menu-btn" onclick="document.getElementById('sidebar').classList.toggle('open')" aria-label="Toggle menu">
+                <i class="bi bi-list"></i>
+            </button>
+
+            <div class="topbar-title">
+                <h2>Parking Slots</h2>
+                <p>
+                    {% if is_admin %}Manage every zone, slot, type and current status{% else %}See every slot and its current status{% endif %}
+                    <span class="ps-live" id="ps-live"><i></i><span id="ps-live-text">Connecting...</span></span>
+                </p>
+            </div>
+
+            <div class="topbar-actions">
+                <div class="notif-wrap" id="notif-wrap"
+     data-url="{% url 'notifications_data' %}"
+     data-user="{{ request.user.pk }}">
+    <button type="button" class="notif-btn" id="notif-btn" aria-label="Notifications" aria-expanded="false">
+        <i class="bi bi-bell"></i>
+        <span class="notif-dot" id="notif-dot" hidden></span>
+    </button>
+
+    <div class="notif-panel" id="notif-panel" role="region" aria-label="Notifications">
+        <div class="notif-head">
+            <div>
+                <strong>Notifications</strong>
+                <span class="notif-count" id="notif-count" hidden></span>
+            </div>
+            <button type="button" id="notif-read-all">Mark all as read</button>
+        </div>
+        <ul class="notif-list" id="notif-list">
+            <li class="notif-empty">Loading...</li>
+        </ul>
+    </div>
+</div>
+                
+                <div class="user">
+                    <div class="avatar">{{ request.user.username|slice:":1"|upper }}</div>
+                    <div class="user-info">
+                        <strong>{{ request.user.get_full_name|default:request.user.username }}</strong>
+                        <span>{% if is_admin %}Administrator{% else %}Driver{% endif %}</span>
+                    </div>
+                </div>
+
+                <form method="post" action="{% url 'logout' %}" class="logout-form" id="logout-form">
+                    {% csrf_token %}
+                    <button type="button" class="logout-btn" id="logout-open" title="Log out">
+                        <i class="bi bi-box-arrow-right"></i>
+                        <span>Log out</span>
+                    </button>
+                </form>
+            </div>
+        </header>
+
+        {% if messages %}
+            {% for m in messages %}
+                <div class="ps-msg {{ m.tags }}">{{ m }}</div>
+            {% endfor %}
+        {% endif %}
+
+        <!-- Stat cards (refreshed live) -->
+        <section class="stats" id="ps-stats">
+            <article class="stat">
+                <div class="stat-icon green"><i class="bi bi-check-circle"></i></div>
+                <div><span>Available</span><h3>{{ available_count|default:0 }}</h3></div>
+            </article>
+            <article class="stat">
+                <div class="stat-icon red"><i class="bi bi-car-front-fill"></i></div>
+                <div><span>Occupied</span><h3>{{ occupied_count|default:0 }}</h3></div>
+            </article>
+            <article class="stat">
+                <div class="stat-icon amber"><i class="bi bi-bookmark-star"></i></div>
+                <div><span>Reserved</span><h3>{{ reserved_count|default:0 }}</h3></div>
+            </article>
+            <article class="stat">
+                <div class="stat-icon blue"><i class="bi bi-cone-striped"></i></div>
+                <div><span>Maintenance</span><h3>{{ maintenance_count|default:0 }}</h3></div>
+            </article>
+        </section>
+
+        {% if is_admin %}
+
+        <!-- ===== Add zone (admin) ===== -->
+        <section class="card ps-add">
+            <details {% if not zones_admin %}open{% endif %}>
+                <summary>
+                    <i class="bi bi-geo-alt-fill" style="color:#4f6df5;font-size:20px"></i>
+                    Add New Zone
+                    <i class="bi bi-chevron-down chev"></i>
+                </summary>
+
+                <form method="post" action="{% url 'add_zone' %}" class="form">
+                    {% csrf_token %}
+                    <div class="field-row">
+                        <div class="field">
+                            <label for="z-name">Zone Name</label>
+                            <div class="input">
+                                <i class="bi bi-geo-alt"></i>
+                                <input type="text" id="z-name" name="name" placeholder="e.g. Zone A - Ground Floor" maxlength="100" required>
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label for="z-desc">Description</label>
+                            <div class="input">
+                                <i class="bi bi-card-text"></i>
+                                <input type="text" id="z-desc" name="description" placeholder="Optional" maxlength="255">
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label for="z-rank">Distance Rank</label>
+                            <div class="input">
+                                <i class="bi bi-signpost-2"></i>
+                                <input type="number" id="z-rank" name="distance_rank" min="0" value="0" title="Lower = nearer to the entrance">
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <button type="submit" class="btn-primary"><i class="bi bi-plus-lg"></i> Save Zone</button>
+                    </div>
+                </form>
+            </details>
+        </section>
+
+        <!-- ===== Add slot (admin) ===== -->
+        <section class="card ps-add ps-section-gap">
+            <details {% if zones_admin and not total_slots %}open{% endif %}>
+                <summary>
+                    <i class="bi bi-plus-circle-fill" style="color:#4f6df5;font-size:20px"></i>
+                    Add New Slot
+                    <i class="bi bi-chevron-down chev"></i>
+                </summary>
+
+                {% if not all_zones %}
+                    <p class="muted" style="margin-top:14px">Add an active zone first, then you can add slots to it.</p>
+                {% else %}
+                <form method="post" action="{% url 'parking_slot' %}" class="form">
+                    {% csrf_token %}
+                    <div class="field-row">
+                        <div class="field">
+                            <label for="n-zone">Zone</label>
+                            <div class="input">
+                                <i class="bi bi-geo-alt"></i>
+                                <select id="n-zone" name="zone" required>
+                                    <option value="">Select zone</option>
+                                    {% for z in all_zones %}
+                                        <option value="{{ z.id }}">{{ z.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label for="n-number">Slot Number</label>
+                            <div class="input">
+                                <i class="bi bi-hash"></i>
+                                <input type="text" id="n-number" name="slot_number" placeholder="e.g. A-01" maxlength="20" required>
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label for="n-type">Slot Type</label>
+                            <div class="input">
+                                <i class="bi bi-truck-front"></i>
+                                <select id="n-type" name="slot_type">
+                                    {% for value, label in type_choices %}
+                                        <option value="{{ value }}">{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label for="n-rank">Distance Rank</label>
+                            <div class="input">
+                                <i class="bi bi-signpost-2"></i>
+                                <input type="number" id="n-rank" name="distance_rank" min="0" value="0" title="Lower = nearer to the entrance">
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <button type="submit" class="btn-primary"><i class="bi bi-plus-lg"></i> Save Slot</button>
+                    </div>
+                </form>
+                {% endif %}
+            </details>
+        </section>
+
+        <!-- ===== Zones (admin) ===== -->
+        <section class="card ps-section-gap">
+            <div class="card-head">
+                <div>
+                    <h3>Zones</h3>
+                    <span class="ps-count">Inactive zones are skipped when allocating slots</span>
+                </div>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Zone</th>
+                            <th>Description</th>
+                            <th>Distance Rank</th>
+                            <th>Slots</th>
+                            <th>Free</th>
+                            <th>Status</th>
+                            <th class="right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ps-zones-body">
+                        {% for z in zones_admin %}
+                        <tr>
+                            <td><span class="ps-slotno">{{ z.name }}</span></td>
+                            <td>{{ z.description|default:"—" }}</td>
+                            <td>{{ z.distance_rank }}</td>
+                            <td>{{ z.slot_total }}</td>
+                            <td>{{ z.slot_free }}</td>
+                            <td>
+                                {% if z.is_active %}
+                                    <span class="ps-status available">Active</span>
+                                {% else %}
+                                    <span class="ps-status inactive">Inactive</span>
+                                {% endif %}
+                            </td>
+                            <td class="right">
+                                <form method="post" action="{% url 'toggle_zone' z.id %}" style="display:inline">
+                                    {% csrf_token %}
+                                    {% if z.is_active %}
+                                        <button type="submit" class="ps-act warn"><i class="bi bi-pause-circle"></i> Deactivate</button>
+                                    {% else %}
+                                        <button type="submit" class="ps-act ok"><i class="bi bi-play-circle"></i> Activate</button>
+                                    {% endif %}
+                                </form>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="empty-row">No zones yet. Add one above.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        {% endif %}
+
+        <!-- ===== Slot table ===== -->
+        <section class="card ps-section-gap">
+            <div class="card-head">
+                <div>
+                    <h3>All Slots</h3>
+                    <span class="ps-count" id="ps-count">Showing {{ slots|length }} of {{ total_slots|default:0 }} slots</span>
+                </div>
+            </div>
+
+            <form method="get" class="ps-toolbar">
+                <div class="field">
+                    <label for="f-q">Search</label>
+                    <div class="input">
+                        <i class="bi bi-search"></i>
+                        <input type="text" id="f-q" name="q" value="{{ request.GET.q }}" placeholder="Slot number or plate">
+                    </div>
+                </div>
+                <div class="field">
+                    <label for="f-zone">Zone</label>
+                    <div class="input">
+                        <i class="bi bi-geo-alt"></i>
+                        <select id="f-zone" name="zone">
+                            <option value="">All zones</option>
+                            {% for z in all_zones %}
+                                <option value="{{ z.id }}" {% if request.GET.zone == z.id|stringformat:"s" %}selected{% endif %}>{{ z.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="field">
+                    <label for="f-status">Status</label>
+                    <div class="input">
+                        <i class="bi bi-funnel"></i>
+                        <select id="f-status" name="status">
+                            <option value="">All statuses</option>
+                            {% for value, label in status_choices %}
+                                <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="field">
+                    <label for="f-type">Slot Type</label>
+                    <div class="input">
+                        <i class="bi bi-truck-front"></i>
+                        <select id="f-type" name="slot_type">
+                            <option value="">All types</option>
+                            {% for value, label in type_choices %}
+                                <option value="{{ value }}" {% if request.GET.slot_type == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <button type="submit" class="btn-primary"><i class="bi bi-funnel-fill"></i> Filter</button>
+                <a href="{% url 'parking_slot' %}" class="ps-btn-ghost">Reset</a>
+            </form>
+
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Slot</th>
+                            <th>Zone</th>
+                            <th>Type</th>
+                            <th>Distance Rank</th>
+                            <th>Status</th>
+                            <th>Current Vehicle</th>
+                            <th>Parked Since</th>
+                            <th class="right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ps-tbody">
+                        {% for slot in slots %}
+                        <tr>
+                            <td><span class="ps-slotno">{{ slot.slot_number }}</span></td>
+                            <td>{{ slot.zone.name }}</td>
+                            <td>
+                                <span class="ps-type">
+                                    <i class="bi {% if slot.slot_type == 'motorcycle' %}bi-bicycle{% elif slot.slot_type == 'van' %}bi-truck{% elif slot.slot_type == 'pwd' %}bi-person-wheelchair{% else %}bi-car-front{% endif %}"></i>
+                                    {{ slot.get_slot_type_display }}
+                                </span>
+                            </td>
+                            <td>{{ slot.distance_rank }}</td>
+                            <td><span class="ps-status {{ slot.status }}">{{ slot.get_status_display }}</span></td>
+                            <td>
+                                {% with alloc=slot.active_allocs.0 %}
+                                    {% if alloc %}
+                                        {% if is_admin or alloc.vehicle.user_id == request.user.id %}
+                                        <div class="cell-vehicle">
+                                            <span class="plate">{{ alloc.vehicle.plate_number }}</span>
+                                            <small>{{ alloc.vehicle.get_vehicle_type_display }}</small>
+                                        </div>
+                                        {% else %}
+                                            <span class="muted">Occupied</span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="muted">&mdash;</span>
+                                    {% endif %}
+                                {% endwith %}
+                            </td>
+                            <td>
+                                {% with alloc=slot.active_allocs.0 %}
+                                    {% if alloc and is_admin or alloc and alloc.vehicle.user_id == request.user.id %}{{ alloc.entry_time|date:"M d, h:i A" }}{% else %}<span class="muted">&mdash;</span>{% endif %}
+                                {% endwith %}
+                            </td>
+                            <td class="right">
+                                <div class="ps-actions">
+                                {% with alloc=slot.active_allocs.0 %}
+                                    {% if slot.status == 'occupied' and alloc %}
+                                        {% if is_admin or alloc.vehicle.user_id == request.user.id %}
+                                            <form method="post" action="{% url 'release_slot' alloc.pk %}" onsubmit="return confirm('Release slot {{ slot.slot_number }} ({{ alloc.vehicle.plate_number }})?');">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                                <button type="submit" class="ps-act rel"><i class="bi bi-box-arrow-right"></i> Release</button>
+                                            </form>
+                                        {% else %}
+                                            <span class="ps-locked"><i class="bi bi-lock-fill"></i> In use</span>
+                                        {% endif %}
+                                    {% elif is_admin and slot.status == 'available' %}
+                                        <form method="post" action="{% url 'slot_status' slot.id %}">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="status" value="maintenance">
+                                            <button type="submit" class="ps-act warn"><i class="bi bi-cone-striped"></i> Maintenance</button>
+                                        </form>
+                                        <form method="post" action="{% url 'delete_slot' slot.id %}" onsubmit="return confirm('Delete slot {{ slot.slot_number }}? This cannot be undone.');">
+                                            {% csrf_token %}
+                                            <button type="submit" class="ps-act danger"><i class="bi bi-trash"></i></button>
+                                        </form>
+                                    {% elif is_admin and slot.status == 'maintenance' %}
+                                        <form method="post" action="{% url 'slot_status' slot.id %}">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="status" value="available">
+                                            <button type="submit" class="ps-act ok"><i class="bi bi-check2-circle"></i> Make Available</button>
+                                        </form>
+                                        <form method="post" action="{% url 'delete_slot' slot.id %}" onsubmit="return confirm('Delete slot {{ slot.slot_number }}? This cannot be undone.');">
+                                            {% csrf_token %}
+                                            <button type="submit" class="ps-act danger"><i class="bi bi-trash"></i></button>
+                                        </form>
+                                    {% elif slot.status == 'reserved' or slot.status == 'occupied' %}
+                                        <span class="ps-locked"><i class="bi bi-lock-fill"></i> In use</span>
+                                    {% else %}
+                                        <span class="muted">&mdash;</span>
+                                    {% endif %}
+                                {% endwith %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="empty-row">
+                                No slots found.{% if is_admin %} Add one above, or change your filters.{% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <footer class="footer">
+            &copy; {% now "Y" %} SmartPark &middot; Smart Parking Slot Allocation System
+        </footer>
+    </main>
+</div>
+
+<!-- ============ LOGOUT CONFIRMATION MODAL ============ -->
+<div class="modal-overlay" id="logout-modal" role="dialog" aria-modal="true" aria-labelledby="logout-title">
+    <div class="modal-box">
+        <div class="modal-icon"><i class="bi bi-box-arrow-right"></i></div>
+        <h3 id="logout-title">Log out?</h3>
+        <p>Are you sure you want to log out of SmartPark?</p>
+        <div class="modal-actions">
+            <button type="button" class="btn-cancel" id="logout-cancel">Cancel</button>
+            <button type="button" class="btn-confirm" id="logout-confirm">Yes, log out</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    /* =========================================================
+       LOGOUT CONFIRMATION
+       ========================================================= */
+    (function () {
+        var modal   = document.getElementById('logout-modal');
+        var openBtn = document.getElementById('logout-open');
+        var cancel  = document.getElementById('logout-cancel');
+        var confirmBtn = document.getElementById('logout-confirm');
+        var form    = document.getElementById('logout-form');
+
+        function openModal()  { modal.classList.add('show'); cancel.focus(); }
+        function closeModal() { modal.classList.remove('show'); openBtn.focus(); }
+
+        openBtn.addEventListener('click', openModal);
+        cancel.addEventListener('click', closeModal);
+        confirmBtn.addEventListener('click', function () { form.submit(); });
+        modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && modal.classList.contains('show')) closeModal();
+        });
+    })();
+
+    /* =========================================================
+       LIVE UPDATES
+       Watches the live slot map data. When any slot changes status
+       (a driver allocated or released a slot), the stat cards, the
+       zone table and the slot table are refreshed in place, keeping
+       your current search / filters.
+       ========================================================= */
+    (function () {
+        var API_URL    = "{% url 'slot_map_data' %}";
+        var REFRESH_MS = 5000;
+        var REPLACE_IDS = ['ps-stats', 'ps-count', 'ps-tbody', 'ps-zones-body'];
+
+        var liveBox  = document.getElementById('ps-live');
+        var liveText = document.getElementById('ps-live-text');
+        var lastSig  = null;
+        var timer    = null;
+        var busy     = false;
+
+        function signature(d) {
+            return d.zones.map(function (z) {
+                return z.id + '[' + z.slots.map(function (s) {
+                    return s.id + ':' + s.status;
+                }).join(',') + ']';
+            }).join('|');
+        }
+
+        function setOnline(ok) {
+            liveBox.classList.toggle('offline', !ok);
+            liveText.textContent = ok
+                ? 'Live · updated ' + new Date().toLocaleTimeString()
+                : 'Connection lost · retrying...';
+        }
+
+        function softReload() {
+            return fetch(window.location.href, { credentials: 'same-origin' })
+                .then(function (res) { return res.text(); })
+                .then(function (html) {
+                    var doc = new DOMParser().parseFromString(html, 'text/html');
+                    REPLACE_IDS.forEach(function (id) {
+                        var current = document.getElementById(id);
+                        var fresh   = doc.getElementById(id);
+                        if (current && fresh) current.innerHTML = fresh.innerHTML;
+                    });
+                });
+        }
+
+        function check() {
+            if (busy) return;
+            busy = true;
+            fetch(API_URL, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function (res) {
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return res.json();
+                })
+                .then(function (data) {
+                    var sig = signature(data);
+                    var changed = (lastSig !== null && sig !== lastSig);
+                    lastSig = sig;
+                    return changed ? softReload() : null;
+                })
+                .then(function () { setOnline(true); })
+                .catch(function () { setOnline(false); })
+                .then(function () { busy = false; });
+        }
+
+        function start() { stop(); check(); timer = setInterval(check, REFRESH_MS); }
+        function stop()  { if (timer) { clearInterval(timer); timer = null; } }
+
+        document.addEventListener('visibilitychange', function () {
+            if (document.hidden) stop(); else start();
+        });
+        start();
+    })();
+</script>
+<script src="{% static 'js/notifications.js' %}"></script>
+
+</body>
+</html>

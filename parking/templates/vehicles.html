@@ -1,0 +1,442 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if is_admin %}Vehicles{% else %}My Vehicles{% endif %} | SmartPark</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+    <link rel="stylesheet" href="{% static 'css/vehicles.css' %}">
+    <link rel="stylesheet" href="{% static 'css/notifications.css' %}">
+</head>
+<body>
+
+<div class="app">
+
+    <!-- ============ SIDEBAR ============ -->
+    <aside class="sidebar" id="sidebar">
+        <div class="brand">
+            <div class="brand-logo"><i class="bi bi-p-square-fill"></i></div>
+            <div>
+                <h1>SmartPark</h1>
+                <span>Slot Allocation System</span>
+            </div>
+        </div>
+
+        <nav class="nav">
+            <p class="nav-label">Main</p>
+            {% if is_admin %}
+    <a href="{% url 'admin_request' %}" class="nav-link"><i class="bi bi-person-gear"></i> Admins &amp; Drivers</a>
+{% else %}
+    <a href="{% url 'driver_home' %}" class="nav-link"><i class="bi bi-grid-1x2-fill"></i> Dashboard</a>
+{% endif %}
+            <a href="{% url 'parking_slot' %}" class="nav-link"><i class="bi bi-map"></i> Parking Slots</a>
+            <a href="{% url 'vehicles' %}" class="nav-link active">
+                <i class="bi bi-car-front"></i>
+                {% if is_admin %}Vehicles{% else %}My Vehicles{% endif %}
+            </a>
+            <a href="{% url 'reservation' %}" class="nav-link"><i class="bi bi-calendar2-check"></i> Reservations</a>
+
+            <p class="nav-label">Management</p>
+            {% if is_admin %}
+                <a href="{% url 'allocation_history' %}" class="nav-link"><i class="bi bi-clock-history"></i> Allocation History</a>
+            {% else %}
+                <a href="{% url 'my_history' %}" class="nav-link"><i class="bi bi-clock-history"></i> My History</a>
+            {% endif %}
+            <a href="#" class="nav-link"><i class="bi bi-credit-card"></i> Payments</a>
+            <a href="#" class="nav-link"><i class="bi bi-bar-chart-line"></i> Reports</a>
+            <a href="#" class="nav-link"><i class="bi bi-gear"></i> Settings</a>
+        </nav>
+
+        
+    </aside>
+
+    <!-- ============ MAIN ============ -->
+    <main class="main">
+
+        <!-- Top bar -->
+        <header class="topbar">
+            <button class="icon-btn menu-btn" onclick="document.getElementById('sidebar').classList.toggle('open')" aria-label="Toggle menu">
+                <i class="bi bi-list"></i>
+            </button>
+
+            <div class="topbar-title">
+                <h2>{% if is_admin %}Vehicles{% else %}My Vehicles{% endif %}</h2>
+                <p>
+                    {% if is_admin %}
+                        All registered vehicles in the system
+                    {% else %}
+                        Manage the vehicles registered to your account
+                    {% endif %}
+                </p>
+            </div>
+
+            <div class="topbar-actions" style="margin-left:auto;">
+                <div class="notif-wrap" id="notif-wrap"
+     data-url="{% url 'notifications_data' %}"
+     data-user="{{ request.user.pk }}">
+    <button type="button" class="notif-btn" id="notif-btn" aria-label="Notifications" aria-expanded="false">
+        <i class="bi bi-bell"></i>
+        <span class="notif-dot" id="notif-dot" hidden></span>
+    </button>
+
+    <div class="notif-panel" id="notif-panel" role="region" aria-label="Notifications">
+        <div class="notif-head">
+            <div>
+                <strong>Notifications</strong>
+                <span class="notif-count" id="notif-count" hidden></span>
+            </div>
+            <button type="button" id="notif-read-all">Mark all as read</button>
+        </div>
+        <ul class="notif-list" id="notif-list">
+            <li class="notif-empty">Loading...</li>
+        </ul>
+    </div>
+</div>
+                <div class="user">
+                    <div class="avatar">{{ request.user.username|slice:":1"|upper }}</div>
+                    <div class="user-info">
+                        <strong>{{ request.user.get_full_name|default:request.user.username }}</strong>
+                        <span>{% if is_admin %}Administrator{% else %}Driver{% endif %}</span>
+                    </div>
+                </div>
+
+                <form method="post" action="{% url 'logout' %}" class="logout-form" id="logout-form">
+                    {% csrf_token %}
+                    <button type="button" class="logout-btn" id="logout-open" title="Log out">
+                        <i class="bi bi-box-arrow-right"></i>
+                        <span>Log out</span>
+                    </button>
+                </form>
+            </div>
+        </header>
+
+        <!-- Flash messages -->
+        {% if messages %}
+        <div class="toasts">
+            {% for message in messages %}
+            <div class="toast {{ message.tags }}">
+                <i class="bi {% if message.tags == 'success' %}bi-check-circle-fill{% elif message.tags == 'error' %}bi-x-circle-fill{% elif message.tags == 'warning' %}bi-exclamation-triangle-fill{% else %}bi-info-circle-fill{% endif %}"></i>
+                <span>{{ message }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Stat cards -->
+        <section class="stats">
+            <article class="stat">
+                <div class="stat-icon blue"><i class="bi bi-car-front"></i></div>
+                <div>
+                    <span>{% if is_admin %}Total Vehicles{% else %}My Vehicles{% endif %}</span>
+                    <h3>{{ total_vehicles|default:0 }}</h3>
+                </div>
+            </article>
+            <article class="stat">
+                <div class="stat-icon green"><i class="bi bi-car-front-fill"></i></div>
+                <div>
+                    <span>Cars</span>
+                    <h3>{{ car_count|default:0 }}</h3>
+                </div>
+            </article>
+            <article class="stat">
+                <div class="stat-icon amber"><i class="bi bi-bicycle"></i></div>
+                <div>
+                    <span>Motorcycles</span>
+                    <h3>{{ motorcycle_count|default:0 }}</h3>
+                </div>
+            </article>
+            <article class="stat">
+                <div class="stat-icon red"><i class="bi bi-truck-front"></i></div>
+                <div>
+                    <span>Vans / PWD</span>
+                    <h3>{{ other_count|default:0 }}</h3>
+                </div>
+            </article>
+        </section>
+
+        <!-- Vehicles list -->
+        <section class="card">
+            <div class="card-head">
+                <div>
+                    <h3>{% if is_admin %}All Vehicles{% else %}Registered Vehicles{% endif %}</h3>
+                    <span class="muted">
+                        {% if is_admin %}Search by plate number or owner{% else %}Search by plate number{% endif %}
+                    </span>
+                </div>
+                <button type="button" class="btn-primary btn-add" id="add-open">
+                    <i class="bi bi-plus-lg"></i> Add Vehicle
+                </button>
+            </div>
+
+            <div class="toolbar">
+                <div class="search">
+                    <i class="bi bi-search"></i>
+                    <input type="text" id="vehicle-search" placeholder="{% if is_admin %}Search plate or owner...{% else %}Search plate number...{% endif %}">
+                </div>
+                <div class="chips" id="type-filter">
+                    <button type="button" class="chip active" data-type="">All</button>
+                    <button type="button" class="chip" data-type="car">Car</button>
+                    <button type="button" class="chip" data-type="motorcycle">Motorcycle</button>
+                    <button type="button" class="chip" data-type="van">Van / SUV</button>
+                    <button type="button" class="chip" data-type="pwd">PWD</button>
+                </div>
+            </div>
+
+            <div class="table-wrap">
+                <table class="table" id="vehicle-table">
+                    <thead>
+                        <tr>
+                            <th>Plate Number</th>
+                            <th>Type</th>
+                            {% if is_admin %}<th>Owner</th>{% endif %}
+                            <th>Added</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for v in vehicles %}
+                        {# Safe even when the vehicle has no user account (v.user is None) #}
+                        {% firstof v.user.get_full_name v.user.username as owner_key %}
+                        <tr class="vehicle-row"
+                            data-plate="{{ v.plate_number|lower }}"
+                            data-owner="{{ owner_key|lower }}"
+                            data-type="{{ v.vehicle_type }}">
+                            <td><span class="plate">{{ v.plate_number }}</span></td>
+                            <td>
+                                <span class="type-badge {{ v.vehicle_type }}">
+                                    <i class="bi {% if v.vehicle_type == 'motorcycle' %}bi-bicycle{% elif v.vehicle_type == 'van' %}bi-truck-front{% elif v.vehicle_type == 'pwd' %}bi-person-wheelchair{% else %}bi-car-front-fill{% endif %}"></i>
+                                    {{ v.get_vehicle_type_display|default:v.vehicle_type }}
+                                </span>
+                            </td>
+                            {% if is_admin %}
+                            <td>
+                                <div class="owner-cell">
+                                    <div class="avatar">{{ v.user.username|slice:":1"|upper|default:"?" }}</div>
+                                    <div>
+                                        <b>{% firstof v.user.get_full_name v.user.username "No account" %}</b>
+                                        {% if v.user %}<small>@{{ v.user.username }}</small>{% endif %}
+                                    </div>
+                                </div>
+                            </td>
+                            {% endif %}
+                            <td>{{ v.created_at|date:"M d, Y"|default:"-" }}</td>
+                            <td class="right">
+                                <div class="row-actions">
+                                    <button type="button" class="btn-sm edit-btn"
+                                            data-url="{% url 'vehicle_edit' v.pk %}"
+                                            data-plate="{{ v.plate_number }}"
+                                            data-type="{{ v.vehicle_type }}">
+                                        <i class="bi bi-pencil-square"></i> Edit
+                                    </button>
+                                    <button type="button" class="btn-sm danger delete-btn"
+                                            data-url="{% url 'vehicle_delete' v.pk %}"
+                                            data-plate="{{ v.plate_number }}">
+                                        <i class="bi bi-trash3"></i> Delete
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="{% if is_admin %}5{% else %}4{% endif %}" class="empty-row">
+                                {% if is_admin %}No vehicles registered yet.{% else %}You haven't added a vehicle yet. Click "Add Vehicle" to get started.{% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        <tr class="no-results" id="no-results">
+                            <td colspan="{% if is_admin %}5{% else %}4{% endif %}" class="empty-row">No vehicles match your search.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <footer class="footer">
+            &copy; {% now "Y" %} SmartPark &middot; Smart Parking Slot Allocation System
+        </footer>
+    </main>
+</div>
+
+<!-- ============ ADD / EDIT MODAL ============ -->
+<div class="modal-overlay" id="vehicle-modal" role="dialog" aria-modal="true" aria-labelledby="vehicle-modal-title">
+    <div class="modal-box">
+        <div class="modal-icon primary"><i class="bi bi-car-front-fill"></i></div>
+        <h3 id="vehicle-modal-title" style="text-align:center;">Add Vehicle</h3>
+        <p class="sub" style="text-align:center;">Enter the vehicle details below.</p>
+
+        <form method="post" action="{% url 'vehicle_add' %}" class="form" id="vehicle-form">
+            {% csrf_token %}
+            <div class="field">
+                <label for="v-plate">Plate Number</label>
+                <div class="input">
+                    <i class="bi bi-credit-card-2-front"></i>
+                    <input type="text" id="v-plate" name="plate_number" placeholder="e.g. ABC 1234" autocomplete="off" required>
+                </div>
+            </div>
+            <div class="field">
+                <label for="v-type">Vehicle Type</label>
+                <div class="input">
+                    <i class="bi bi-truck-front"></i>
+                    <select id="v-type" name="vehicle_type">
+                        <option value="car">Car</option>
+                        <option value="motorcycle">Motorcycle</option>
+                        <option value="van">Van / SUV</option>
+                        <option value="pwd">PWD</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-cancel" id="vehicle-cancel">Cancel</button>
+                <button type="submit" class="btn-save" id="vehicle-save">Save Vehicle</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ============ DELETE CONFIRMATION MODAL ============ -->
+<div class="modal-overlay" id="delete-modal" role="dialog" aria-modal="true" aria-labelledby="delete-title">
+    <div class="modal-box center">
+        <div class="modal-icon"><i class="bi bi-trash3"></i></div>
+        <h3 id="delete-title">Delete vehicle?</h3>
+        <p class="sub" id="delete-desc">This action cannot be undone.</p>
+        <form method="post" id="delete-form">
+            {% csrf_token %}
+            <div class="modal-actions">
+                <button type="button" class="btn-cancel" id="delete-cancel">Cancel</button>
+                <button type="submit" class="btn-confirm">Yes, delete</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ============ LOGOUT CONFIRMATION MODAL ============ -->
+<div class="modal-overlay" id="logout-modal" role="dialog" aria-modal="true" aria-labelledby="logout-title">
+    <div class="modal-box center">
+        <div class="modal-icon"><i class="bi bi-box-arrow-right"></i></div>
+        <h3 id="logout-title">Log out?</h3>
+        <p class="sub">Are you sure you want to log out of SmartPark?</p>
+        <div class="modal-actions">
+            <button type="button" class="btn-cancel" id="logout-cancel">Cancel</button>
+            <button type="button" class="btn-confirm" id="logout-confirm">Yes, log out</button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    /* ---------- generic modal helpers ---------- */
+    function openModal(m)  { m.classList.add('show'); }
+    function closeModal(m) { m.classList.remove('show'); }
+    function wireOverlay(m) {
+        m.addEventListener('click', function (e) { if (e.target === m) closeModal(m); });
+    }
+    var modals = document.querySelectorAll('.modal-overlay');
+    Array.prototype.forEach.call(modals, wireOverlay);
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') Array.prototype.forEach.call(modals, closeModal);
+    });
+
+    /* ---------- logout ---------- */
+    var logoutModal = document.getElementById('logout-modal');
+    document.getElementById('logout-open').addEventListener('click', function () { openModal(logoutModal); });
+    document.getElementById('logout-cancel').addEventListener('click', function () { closeModal(logoutModal); });
+    document.getElementById('logout-confirm').addEventListener('click', function () {
+        document.getElementById('logout-form').submit();
+    });
+
+    /* ---------- add / edit vehicle ---------- */
+    var vModal   = document.getElementById('vehicle-modal');
+    var vForm    = document.getElementById('vehicle-form');
+    var vTitle   = document.getElementById('vehicle-modal-title');
+    var vPlate   = document.getElementById('v-plate');
+    var vType    = document.getElementById('v-type');
+    var ADD_URL  = vForm.getAttribute('action');
+
+    document.getElementById('add-open').addEventListener('click', function () {
+        vForm.setAttribute('action', ADD_URL);
+        vTitle.textContent = 'Add Vehicle';
+        vPlate.value = '';
+        vType.value = 'car';
+        openModal(vModal);
+        vPlate.focus();
+    });
+    document.getElementById('vehicle-cancel').addEventListener('click', function () { closeModal(vModal); });
+
+    Array.prototype.forEach.call(document.querySelectorAll('.edit-btn'), function (btn) {
+        btn.addEventListener('click', function () {
+            vForm.setAttribute('action', btn.getAttribute('data-url'));
+            vTitle.textContent = 'Edit Vehicle';
+            vPlate.value = btn.getAttribute('data-plate');
+            vType.value  = btn.getAttribute('data-type');
+            openModal(vModal);
+            vPlate.focus();
+        });
+    });
+
+    vForm.addEventListener('submit', function () {
+        var b = document.getElementById('vehicle-save');
+        b.disabled = true;
+        b.textContent = 'Saving...';
+    });
+
+    /* ---------- delete vehicle ---------- */
+    var dModal = document.getElementById('delete-modal');
+    var dForm  = document.getElementById('delete-form');
+    var dDesc  = document.getElementById('delete-desc');
+
+    Array.prototype.forEach.call(document.querySelectorAll('.delete-btn'), function (btn) {
+        btn.addEventListener('click', function () {
+            dForm.setAttribute('action', btn.getAttribute('data-url'));
+            dDesc.textContent = 'Delete vehicle ' + btn.getAttribute('data-plate') + '? This action cannot be undone.';
+            openModal(dModal);
+        });
+    });
+    document.getElementById('delete-cancel').addEventListener('click', function () { closeModal(dModal); });
+
+    /* ---------- search + type filter ---------- */
+    var rows     = document.querySelectorAll('.vehicle-row');
+    var searchEl = document.getElementById('vehicle-search');
+    var chips    = document.getElementById('type-filter');
+    var noRes    = document.getElementById('no-results');
+    var typeFilter = '';
+
+    function applyFilters() {
+        var q = searchEl.value.trim().toLowerCase();
+        var shown = 0;
+        Array.prototype.forEach.call(rows, function (row) {
+            var okText = !q || row.dataset.plate.indexOf(q) !== -1 || row.dataset.owner.indexOf(q) !== -1;
+            var okType = !typeFilter || row.dataset.type === typeFilter;
+            var show = okText && okType;
+            row.style.display = show ? '' : 'none';
+            if (show) shown++;
+        });
+        if (noRes) noRes.classList.toggle('show', rows.length > 0 && shown === 0);
+    }
+    searchEl.addEventListener('input', applyFilters);
+    chips.addEventListener('click', function (e) {
+        var chip = e.target.closest('.chip');
+        if (!chip) return;
+        typeFilter = chip.getAttribute('data-type');
+        Array.prototype.forEach.call(chips.children, function (c) {
+            c.classList.toggle('active', c === chip);
+        });
+        applyFilters();
+    });
+
+    /* ---------- auto-hide flash messages ---------- */
+    Array.prototype.forEach.call(document.querySelectorAll('.toast'), function (t) {
+        setTimeout(function () {
+            t.classList.add('hide');
+            setTimeout(function () { t.remove(); }, 450);
+        }, 6000);
+    });
+})();
+</script>
+<script src="{% static 'js/notifications.js' %}"></script>
+</body>
+</html>

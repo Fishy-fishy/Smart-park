@@ -1,0 +1,330 @@
+/* ==========================================================
+   SmartPark — Reservation Page Styles
+   File: static/css/reservation.css
+
+   IMPORTANT: this file only holds styles that are specific to the
+   Reservations page. The sidebar, top bar, stat cards, cards, modals
+   and base styles all come from dashboard.css, so load that first:
+
+     <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+     <link rel="stylesheet" href="{% static 'css/reservation.css' %}">
+     <link rel="stylesheet" href="{% static 'css/notifications.css' %}">
+   ========================================================== */
+
+/* ===================== PAGE COLOURS =====================
+   Only colours used by the badges, buttons and table below.
+   Sidebar / layout variables are intentionally NOT set here. */
+
+:root {
+    --green-soft: #d1fae5;
+    --green-text: #047857;
+
+    --red-soft: #fee2e2;
+    --red-text: #b91c1c;
+
+    --amber-soft: #fef3c7;
+    --amber-text: #b45309;
+
+    --blue-soft: #dbeafe;
+
+    --field-bg: #f8fafc;
+    --row-hover: #f8faff;
+    --head-bg: #f8fafc;
+}
+
+[data-theme="dark"] {
+    --field-bg: #0f1530;
+    --row-hover: rgba(99, 102, 241, .08);
+    --head-bg: rgba(255, 255, 255, .04);
+
+    --green-soft: rgba(16, 185, 129, .16);
+    --green-text: #34d399;
+
+    --red-soft: rgba(220, 38, 38, .16);
+    --red-text: #f87171;
+
+    --amber-soft: rgba(245, 158, 11, .16);
+    --amber-text: #fbbf24;
+
+    --blue-soft: rgba(59, 130, 246, .18);
+}
+
+/* ===================== PAGE HEADING ===================== */
+
+.page-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.page-heading h3 {
+    font-size: 18px;
+    font-weight: 800;
+}
+
+.page-heading p {
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+/* ===================== RESERVATION FORM ===================== */
+
+.reservation-form {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 18px;
+}
+
+.reservation-form .field.full {
+    grid-column: 1 / -1;
+}
+
+/* ===================== TABLE CONTROLS ===================== */
+
+.table-controls {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.table-controls select {
+    padding: 11px 14px;
+
+    background: var(--field-bg);
+    color: var(--text);
+
+    border: 1px solid var(--border);
+    border-radius: 11px;
+
+    font: inherit;
+    font-size: 12px;
+    outline: none;
+}
+
+.table-controls select:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+.table-controls .input {
+    min-width: 190px;
+}
+
+/* ===================== RESERVATION TABLE ===================== */
+
+.table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    border-radius: 12px;
+}
+
+.table-wrap table {
+    width: 100%;
+    min-width: 750px;
+    border-collapse: separate;
+    border-spacing: 0 7px;
+}
+
+.table-wrap th {
+    padding: 12px 15px;
+
+    background: var(--head-bg);
+    color: var(--muted);
+
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .8px;
+    text-align: left;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.table-wrap th:first-child {
+    border-radius: 10px 0 0 10px;
+}
+
+.table-wrap th:last-child {
+    border-radius: 0 10px 10px 0;
+}
+
+.table-wrap td {
+    padding: 14px 15px;
+
+    background: var(--field-bg);
+    color: var(--text);
+
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.table-wrap td:first-child {
+    border-radius: 10px 0 0 10px;
+}
+
+.table-wrap td:last-child {
+    border-radius: 0 10px 10px 0;
+}
+
+.table-wrap tbody tr:hover td {
+    background: var(--row-hover);
+}
+
+/* ===================== STATUS BADGES ===================== */
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+
+    padding: 6px 12px;
+
+    border-radius: 30px;
+
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.badge::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    background: currentColor;
+    border-radius: 50%;
+}
+
+.pending {
+    background: var(--amber-soft);
+    color: var(--amber-text);
+}
+
+.confirmed,
+.approved {
+    background: var(--green-soft);
+    color: var(--green-text);
+}
+
+.rejected {
+    background: var(--red-soft);
+    color: var(--red-text);
+}
+
+.completed {
+    background: var(--blue-soft);
+    color: #1d4ed8;
+}
+
+.cancelled {
+    background: rgba(148, 163, 184, .18);
+    color: var(--muted);
+}
+
+/* ===================== TABLE ACTIONS ===================== */
+
+.action-buttons {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 7px;
+}
+
+.action-buttons form {
+    margin: 0;
+}
+
+.action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+
+    padding: 8px 12px;
+
+    border: none;
+    border-radius: 9px;
+
+    font: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+
+    transition: all .25s ease;
+}
+
+.action-btn:hover {
+    transform: translateY(-2px);
+}
+
+.approve-btn {
+    background: var(--green-soft);
+    color: var(--green-text);
+}
+
+.reject-btn {
+    background: var(--red-soft);
+    color: var(--red-text);
+}
+
+.cancel-btn {
+    background: rgba(148, 163, 184, .18);
+    color: var(--muted);
+}
+
+.complete-btn {
+    background: var(--blue-soft);
+    color: #1d4ed8;
+}
+
+/* ===================== EMPTY STATE ===================== */
+
+.empty {
+    padding: 44px 10px;
+    color: var(--muted);
+    text-align: center;
+    font-size: 13px;
+}
+
+.empty i {
+    display: block;
+    margin-bottom: 10px;
+    font-size: 40px;
+    opacity: .6;
+}
+
+/* ===================== RESPONSIVE ===================== */
+
+@media (max-width: 900px) {
+    .reservation-form {
+        grid-template-columns: 1fr;
+    }
+
+    .reservation-form .field.full {
+        grid-column: auto;
+    }
+}
+
+@media (max-width: 560px) {
+    .table-controls {
+        width: 100%;
+    }
+
+    .table-controls select,
+    .table-controls .input {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .action-buttons {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}
+/* Push the bell, user and log out buttons to the right edge of the top bar */
+.topbar-actions {
+    margin-left: auto;
+}

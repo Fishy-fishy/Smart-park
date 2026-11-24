@@ -1,0 +1,1185 @@
+
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payments | SmartPark</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+    <link rel="stylesheet" href="{% static 'css/payment.css' %}">
+</head>
+
+<body
+    data-is-admin="{% if is_admin %}1{% else %}0{% endif %}"
+    data-user-id="{{ request.user.pk }}"
+    data-notif-url="{% url 'notifications_data' %}">
+
+<a href="#main" class="skip-link">Skip to main content</a>
+
+<div class="app">
+
+    <!-- SIDEBAR -->
+    {% with url_name=request.resolver_match.url_name %}
+    <aside class="sidebar" id="sidebar" aria-label="Main navigation">
+        <div class="brand">
+            <div class="brand-logo"><i class="bi bi-p-square-fill"></i></div>
+            <div>
+                <h1>{{ cfg.facility_name|default:"SmartPark" }}</h1>
+                <span>Slot Allocation System</span>
+            </div>
+        </div>
+
+        <nav class="nav">
+            <p class="nav-label">Main</p>
+
+            {% if is_admin %}
+                <a href="{% url 'admin_request' %}" class="nav-link {% if url_name == 'admin_request' %}active{% endif %}">
+                    <i class="bi bi-person-gear"></i> Admins &amp; Drivers
+                </a>
+            {% else %}
+                <a href="{% url 'driver_home' %}" class="nav-link {% if url_name == 'driver_home' %}active{% endif %}">
+                    <i class="bi bi-grid-1x2-fill"></i> Dashboard
+                </a>
+            {% endif %}
+
+            <a href="{% url 'parking_slot' %}" class="nav-link {% if url_name == 'parking_slot' %}active{% endif %}">
+                <i class="bi bi-map"></i> Parking Slots
+            </a>
+
+            <a href="{% url 'vehicles' %}" class="nav-link {% if url_name == 'vehicles' %}active{% endif %}">
+                <i class="bi bi-car-front"></i>
+                {% if is_admin %}Vehicles{% else %}My Vehicles{% endif %}
+            </a>
+
+            <a href="{% url 'reservation' %}" class="nav-link {% if url_name == 'reservation' %}active{% endif %}">
+                <i class="bi bi-calendar2-check"></i> Reservations
+            </a>
+
+            <p class="nav-label">Management</p>
+
+            {% if is_admin %}
+                <a href="{% url 'allocation_history' %}" class="nav-link {% if url_name == 'allocation_history' %}active{% endif %}">
+                    <i class="bi bi-clock-history"></i> Allocation History
+                </a>
+            {% else %}
+                <a href="{% url 'my_history' %}" class="nav-link {% if url_name == 'my_history' %}active{% endif %}">
+                    <i class="bi bi-clock-history"></i> My History
+                </a>
+            {% endif %}
+
+            <a href="{% url 'payments' %}" class="nav-link active" aria-current="page">
+                <i class="bi bi-credit-card"></i> Payments
+            </a>
+
+            <a href="{% url 'settings' %}" class="nav-link {% if url_name == 'settings' %}active{% endif %}">
+                <i class="bi bi-gear"></i> Settings
+            </a>
+        </nav>
+    </aside>
+    {% endwith %}
+
+    <div class="backdrop" id="backdrop"></div>
+
+    <!-- MAIN -->
+    <main class="main" id="main">
+
+        <!-- TOPBAR -->
+        <header class="topbar">
+
+            <button type="button" class="icon-btn menu-btn" id="menu-btn"
+                    aria-label="Toggle menu" aria-controls="sidebar" aria-expanded="false">
+                <i class="bi bi-list"></i>
+            </button>
+
+            <div class="topbar-title">
+                <h2>Payments</h2>
+
+                {% if is_admin %}
+                    <p>Track revenue, confirm payments and review every transaction.</p>
+                {% else %}
+                    <p>First hour is free, then you pay for the extra time.</p>
+                {% endif %}
+            </div>
+
+            <div class="topbar-actions">
+
+                <div class="notif-wrap" id="notif-wrap"
+                     data-url="{% url 'notifications_data' %}"
+                     data-user="{{ request.user.pk }}">
+
+                    <button type="button" class="icon-btn" id="notif-btn"
+                            aria-label="Notifications" aria-haspopup="true"
+                            aria-expanded="false" aria-controls="notif-panel">
+                        <i class="bi bi-bell"></i>
+                        <span class="dot" id="notif-dot" hidden></span>
+                    </button>
+
+                    <div class="notif-panel" id="notif-panel" role="region"
+                         aria-label="Notifications">
+                        <div class="notif-head">
+                            <div>
+                                <strong>Notifications</strong>
+                                <span class="notif-count" id="notif-count" hidden></span>
+                            </div>
+                            <button type="button" id="notif-read-all">Mark all as read</button>
+                        </div>
+
+                        <ul class="notif-list" id="notif-list">
+                            <li class="notif-empty">Loading...</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="user">
+                    <div class="avatar" aria-hidden="true">
+                        {{ request.user.username|slice:":1"|upper }}
+                    </div>
+
+                    <div class="user-info">
+                        <strong>{{ request.user.get_full_name|default:request.user.username }}</strong>
+                        <span>
+                            {% if request.user.is_staff %}Administrator{% else %}Driver{% endif %}
+                        </span>
+                    </div>
+                </div>
+
+                <form method="post" action="{% url 'logout' %}"
+                      class="logout-form" id="logout-form">
+                    {% csrf_token %}
+
+                    <button type="button" class="logout-btn" id="logout-open"
+                            title="Log out" aria-label="Log out">
+                        <i class="bi bi-box-arrow-right"></i>
+                        <span>Log out</span>
+                    </button>
+                </form>
+
+            </div>
+        </header>
+
+        <!-- FLASH MESSAGES -->
+        {% if messages %}
+        <div class="toasts" id="toasts" role="status" aria-live="polite">
+            {% for message in messages %}
+            <div class="toast {{ message.tags }}">
+                <i class="bi
+                    {% if message.tags == 'success' %}bi-check-circle-fill
+                    {% elif message.tags == 'error' %}bi-x-circle-fill
+                    {% elif message.tags == 'warning' %}bi-exclamation-triangle-fill
+                    {% else %}bi-info-circle-fill{% endif %}">
+                </i>
+                <span>{{ message }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- PRICING BANNER -->
+        <section class="free-banner" aria-label="Pricing rule">
+            <div class="free-banner-icon">
+                <i class="bi bi-gift-fill"></i>
+            </div>
+
+            <div class="free-banner-text">
+                <h3>1 hour free parking</h3>
+                <p>
+                    Every parking session starts with
+                    <b>{{ free_minutes|default:60 }} free minutes</b>.
+                    After that, you are charged
+                    <b>&#8369;{{ hourly_rate|default:0 }}</b> per hour
+                    (any started hour counts as a full hour).
+                </p>
+            </div>
+        </section>
+
+        {% if is_admin %}
+
+        <!-- ADMIN VIEW -->
+
+        <!-- REVENUE STATS -->
+        <section class="stats" aria-label="Revenue summary">
+
+            <article class="stat">
+                <div class="stat-icon green"><i class="bi bi-cash-stack"></i></div>
+                <div>
+                    <span>Today's revenue</span>
+                    <h3>&#8369;{{ rev_today|default:0|floatformat:2 }}</h3>
+                </div>
+            </article>
+
+            <article class="stat">
+                <div class="stat-icon blue"><i class="bi bi-calendar-month"></i></div>
+                <div>
+                    <span>This month</span>
+                    <h3>&#8369;{{ rev_month|default:0|floatformat:2 }}</h3>
+                </div>
+            </article>
+
+            <article class="stat">
+                <div class="stat-icon amber"><i class="bi bi-hourglass-split"></i></div>
+                <div>
+                    <span>Pending ({{ pending_count|default:0 }})</span>
+                    <h3>&#8369;{{ pending_amount|default:0|floatformat:2 }}</h3>
+                </div>
+            </article>
+
+            <article class="stat">
+                <div class="stat-icon red"><i class="bi bi-receipt"></i></div>
+                <div>
+                    <span>Payments today</span>
+                    <h3>{{ payments_today|default:0 }}</h3>
+                </div>
+            </article>
+
+        </section>
+
+        <section class="pay-layout">
+
+            <!-- PENDING PAYMENTS -->
+            <div class="card session-card" id="session-card"
+                 data-free-minutes="{{ free_minutes|default:60 }}"
+                 data-rate="{{ hourly_rate|default:0 }}">
+
+                <div class="card-head">
+                    <h3>Pending Payments</h3>
+                    <span class="muted">Waiting for your confirmation</span>
+                </div>
+
+                <ul class="adm-pending-list" id="adm-pending-list">
+
+                    {% for p in pending_payments %}
+                    <li class="adm-pending-item">
+
+                        <div class="adm-pending-main">
+                            <span class="plate">
+                                {{ p.allocation.vehicle.plate_number }}
+                            </span>
+
+                            <div class="adm-pending-info">
+                                <b>
+                                    {% with driver=p.allocation.vehicle.user %}
+                                        {% if driver %}
+                                            {{ driver.get_full_name|default:driver.username }}
+                                        {% else %}
+                                            {{ p.allocation.vehicle.owner_name|default:"Unknown Driver" }}
+                                        {% endif %}
+                                    {% endwith %}
+                                </b>
+
+                                <small class="muted">
+                                    {{ p.get_method_display }}
+                                    &middot; Slot {{ p.allocation.slot.slot_number }}
+                                    &middot; {{ p.created_at|date:"M d, h:i A" }}
+                                </small>
+                            </div>
+                        </div>
+
+                        <b class="adm-pending-amt">&#8369;{{ p.amount }}</b>
+
+                        <div class="adm-pending-actions">
+
+                            <form method="post" action="{% url 'payment_confirm' p.pk %}">
+                                {% csrf_token %}
+                                <button type="submit" class="btn-sm adm-btn-ok">
+                                    <i class="bi bi-check-circle"></i> Confirm
+                                </button>
+                            </form>
+
+                            <form method="post" action="{% url 'payment_reject' p.pk %}">
+                                {% csrf_token %}
+                                <button type="submit" class="btn-sm adm-btn-no">
+                                    <i class="bi bi-x-circle"></i> Reject
+                                </button>
+                            </form>
+
+                        </div>
+                    </li>
+
+                    {% endfor %}
+
+                </ul>
+
+                <div class="empty compact" id="adm-pending-empty" hidden>
+                    <i class="bi bi-check2-circle"></i>
+                    <p>All caught up. There are no payments waiting for confirmation.</p>
+                </div>
+
+            </div>
+
+            <!-- REVENUE CHART -->
+            <div class="card method-card">
+
+                <div class="card-head">
+                    <h3>Revenue &middot; Last 7 Days</h3>
+                    <span class="muted">Confirmed payments only</span>
+                </div>
+
+                {% if revenue_chart %}
+
+                <div class="adm-chart" role="img"
+                     aria-label="Daily revenue for the last 7 days">
+
+                    {% for d in revenue_chart %}
+                    <div class="adm-chart-col">
+                        <span class="adm-chart-val">&#8369;{{ d.amount|floatformat:0 }}</span>
+
+                        <div class="adm-chart-track">
+                            <div class="adm-chart-bar" data-h="{{ d.pct }}"></div>
+                        </div>
+
+                        <span class="adm-chart-label">{{ d.label }}</span>
+                    </div>
+                    {% endfor %}
+
+                </div>
+
+                <div class="adm-split">
+
+                    <div class="adm-split-head">
+                        <span>Payment method split</span>
+                        <span class="muted">This month</span>
+                    </div>
+
+                    <div class="adm-split-bar">
+                        <div class="adm-split-gcash" data-w="{{ gcash_pct|default:0 }}"></div>
+                        <div class="adm-split-cash" data-w="{{ cash_pct|default:0 }}"></div>
+                    </div>
+
+                    <div class="adm-split-legend">
+                        <span>
+                            <i class="adm-dot gcash"></i>
+                            GCash &middot; &#8369;{{ gcash_total|default:0|floatformat:2 }}
+                        </span>
+
+                        <span>
+                            <i class="adm-dot cash"></i>
+                            Cash &middot; &#8369;{{ cash_total|default:0|floatformat:2 }}
+                        </span>
+                    </div>
+
+                </div>
+
+                {% else %}
+
+                <div class="empty compact">
+                    <i class="bi bi-bar-chart-line"></i>
+                    <p>No revenue data yet.</p>
+                </div>
+
+                {% endif %}
+
+            </div>
+
+        </section>
+
+        <!-- ADMIN RECENT PAYMENTS -->
+        <section class="card">
+
+            <div class="card-head adm-table-head">
+                <h3>Recent Payments</h3>
+
+                <button type="button" class="btn-sm" id="adm-export">
+                    <i class="bi bi-download"></i> Export CSV
+                </button>
+            </div>
+
+            <div class="adm-toolbar">
+
+                <div class="adm-search">
+                    <i class="bi bi-search"></i>
+                    <input type="text" id="adm-q"
+                           placeholder="Search receipt, driver or plate..."
+                           aria-label="Search payments">
+                </div>
+
+                <select id="adm-status" aria-label="Filter by status">
+                    <option value="">All status</option>
+                    <option value="paid">Paid</option>
+                    <option value="pending">Pending</option>
+                    <option value="free">Free</option>
+                </select>
+
+                <select id="adm-method" aria-label="Filter by method">
+                    <option value="">All methods</option>
+                    <option value="gcash">GCash</option>
+                    <option value="cash">Cash Counter</option>
+                </select>
+
+            </div>
+
+            <div class="table-wrap">
+
+                <table class="table" id="adm-table">
+
+                    <thead>
+                        <tr>
+                            <th>Receipt</th>
+                            <th>Driver</th>
+                            <th>Vehicle</th>
+                            <th>Slot</th>
+                            <th>Parked</th>
+                            <th>Method</th>
+                            <th>Amount</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+
+                    <tbody id="adm-rows">
+
+                        {% for p in payments %}
+
+                        <tr data-row
+                            data-status="{% if p.is_paid %}paid{% else %}pending{% endif %}"
+                            data-method="{{ p.method }}"
+                            data-free="{% if p.amount > 0 %}0{% else %}1{% endif %}">
+
+                            <td>
+                                <b>#{{ p.pk }}</b><br>
+                                <small class="muted">{{ p.created_at|date:"M d, h:i A" }}</small>
+                            </td>
+
+                            <td>
+                                {% with driver=p.allocation.vehicle.user %}
+                                    {% if driver %}
+                                        {{ driver.get_full_name|default:driver.username }}
+                                    {% else %}
+                                        {{ p.allocation.vehicle.owner_name|default:"Unknown Driver" }}
+                                    {% endif %}
+                                {% endwith %}
+                            </td>
+
+                            <td>
+                                <span class="plate">{{ p.allocation.vehicle.plate_number }}</span>
+                            </td>
+
+                            <td><b>{{ p.allocation.slot.slot_number }}</b></td>
+
+                            <td>{{ p.allocation.entry_time|timesince:p.allocation.exit_time }}</td>
+
+                            <td>{{ p.get_method_display }}</td>
+
+                            <td>
+                                {% if p.amount > 0 %}
+                                    <b>&#8369;{{ p.amount }}</b>
+                                {% else %}
+                                    <span class="badge-free">FREE</span>
+                                {% endif %}
+                            </td>
+
+                            <td>
+                                {% if p.is_paid %}
+                                    <span class="badge active">Paid</span>
+                                {% else %}
+                                    <span class="badge pending">Pending</span>
+                                {% endif %}
+                            </td>
+
+                            <td>
+                                {% if not p.is_paid %}
+
+                                <div class="adm-row-actions">
+
+                                    <form method="post" action="{% url 'payment_confirm' p.pk %}">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn-sm adm-btn-ok">
+                                            <i class="bi bi-check-circle"></i> Confirm
+                                        </button>
+                                    </form>
+
+                                    <form method="post" action="{% url 'payment_reject' p.pk %}">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn-sm adm-btn-no">
+                                            <i class="bi bi-x-circle"></i> Reject
+                                        </button>
+                                    </form>
+
+                                </div>
+
+                                {% else %}
+                                    <span class="muted">&mdash;</span>
+                                {% endif %}
+                            </td>
+
+                        </tr>
+
+                        {% empty %}
+
+                        <tr>
+                            <td colspan="9" class="empty-row">No payments yet.</td>
+                        </tr>
+
+                        {% endfor %}
+
+                        <tr id="adm-nomatch" style="display:none;">
+                            <td colspan="9" class="empty-row">
+                                No payments match your filters.
+                            </td>
+                        </tr>
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+            <div class="adm-pager">
+                <span class="muted" id="adm-info"></span>
+
+                <div class="adm-pager-btns">
+                    <button type="button" class="btn-sm" id="adm-prev">
+                        <i class="bi bi-chevron-left"></i> Prev
+                    </button>
+
+                    <button type="button" class="btn-sm" id="adm-next">
+                        Next <i class="bi bi-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+
+        </section>
+
+        {% else %}
+
+        <!-- DRIVER VIEW -->
+
+        <section class="pay-layout">
+
+            <!-- CURRENT PARKING SESSION -->
+            <div class="card session-card" id="session-card"
+                 data-free-minutes="{{ free_minutes|default:60 }}"
+                 data-rate="{{ hourly_rate|default:0 }}">
+
+                <div class="card-head">
+                    <h3>Current Parking Session</h3>
+
+                    {% if my_current %}
+                        <span class="badge active">Parked</span>
+                    {% endif %}
+                </div>
+
+                {% if my_current %}
+
+                <div class="session-meta">
+
+                    <div class="current-item">
+                        <span>Slot</span>
+                        <b>{{ my_current.slot.slot_number }}</b>
+                    </div>
+
+                    <div class="current-item">
+                        <span>Zone</span>
+                        <b>{{ my_current.slot.zone.name }}</b>
+                    </div>
+
+                    <div class="current-item">
+                        <span>Vehicle</span>
+                        <b>{{ my_current.vehicle.plate_number }}</b>
+                    </div>
+
+                    <div class="current-item">
+                        <span>Parked since</span>
+                        <b>{{ my_current.entry_time|date:"M d, h:i A" }}</b>
+                    </div>
+
+                </div>
+
+                <!-- FREE TIME PROGRESS -->
+                <div class="free-progress" id="free-progress"
+                     data-since="{{ my_current.entry_time|date:'c' }}">
+
+                    <div class="free-progress-top">
+                        <span id="free-status" class="free-chip free">Free time</span>
+                        <strong id="free-left">--:--:--</strong>
+                    </div>
+
+                    <div class="bar" role="progressbar"
+                         aria-valuemin="0" aria-valuemax="100"
+                         aria-valuenow="0" id="free-bar-wrap">
+                        <div class="bar-fill" id="free-bar"></div>
+                    </div>
+
+                    <div class="bar-scale">
+                        <span>0 min</span>
+                        <span>{{ free_minutes|default:60 }} min free</span>
+                    </div>
+
+                </div>
+
+                <!-- BILL BREAKDOWN -->
+                <ul class="bill">
+
+                    <li>
+                        <span>Total parked time</span>
+                        <b id="bill-elapsed">--</b>
+                    </li>
+
+                    <li>
+                        <span>Free allowance</span>
+                        <b>&minus; {{ free_minutes|default:60 }} min</b>
+                    </li>
+
+                    <li>
+                        <span>Chargeable time</span>
+                        <b id="bill-billable">0 min</b>
+                    </li>
+
+                    <li>
+                        <span>Hours charged</span>
+                        <b id="bill-hours">0 hr</b>
+                    </li>
+
+                    <li>
+                        <span>Rate</span>
+                        <b>&#8369;{{ hourly_rate|default:0 }} / hr</b>
+                    </li>
+
+                    <li class="bill-total">
+                        <span>Amount due</span>
+                        <b id="bill-total">&#8369;0.00</b>
+                    </li>
+
+                </ul>
+
+                {% else %}
+
+                <div class="empty compact">
+                    <i class="bi bi-car-front"></i>
+                    <p>You currently have no active parking session.</p>
+
+                    <a href="{% url 'driver_home' %}" class="btn-sm">
+                        <i class="bi bi-search"></i> Find a parking slot
+                    </a>
+                </div>
+
+                {% endif %}
+
+            </div>
+
+            <!-- PAYMENT METHOD -->
+            <div class="card method-card">
+
+                <div class="card-head">
+                    <h3>Payment Method</h3>
+                    <span class="muted">Choose how you want to pay</span>
+                </div>
+
+                {% if my_current %}
+
+                <form method="post"
+                      action="{% url 'make_payment' my_current.pk %}"
+                      id="pay-form" class="form">
+
+                    {% csrf_token %}
+
+                    <!-- PAYMENT METHODS -->
+                    <div class="methods" role="radiogroup"
+                         aria-label="Payment method">
+
+                        <label class="method">
+                            <input type="radio" name="method"
+                                   value="gcash" checked>
+
+                            <span class="method-box">
+                                <i class="bi bi-phone"></i>
+                                <b>GCash</b>
+                                <small>Scan QR Code</small>
+                            </span>
+                        </label>
+
+                        <label class="method">
+                            <input type="radio" name="method"
+                                   value="cash">
+
+                            <span class="method-box">
+                                <i class="bi bi-cash-coin"></i>
+                                <b>Cash Counter</b>
+                                <small>Pay to the attendant</small>
+                            </span>
+                        </label>
+
+                    </div>
+
+                    <!-- GCASH QR PAYMENT -->
+                    <div class="method-fields" id="fields-ewallet">
+
+                        <div class="gcash-qr">
+
+                            <div class="gcash-qr-img">
+
+                                <img src="{% static 'images/gcash-qr.png' %}"
+                                     alt="SmartPark GCash QR Code"
+                                     onerror="this.closest('.gcash-qr').classList.add('no-img')">
+
+                                <div class="gcash-qr-missing">
+                                    <i class="bi bi-qr-code"></i>
+                                    <span>QR not available</span>
+                                </div>
+
+                            </div>
+
+                            <div class="gcash-qr-info">
+
+                                <h4>Pay using GCash QR</h4>
+
+                                <ol>
+                                    <li>Open your GCash application.</li>
+                                    <li>Tap <b>Scan QR</b>.</li>
+                                    <li>Scan the SmartPark GCash QR code.</li>
+                                    <li>Enter the exact amount displayed below.</li>
+                                    <li>Complete your payment.</li>
+                                </ol>
+
+                                <div class="qr-payment-amount">
+                                    <span>Amount to Pay</span>
+                                    <strong id="qr-amount">&#8369;0.00</strong>
+                                </div>
+
+                                <p class="hint">
+                                    Your payment will be reviewed by the administrator.
+                                </p>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                    <!-- CASH COUNTER NOTE -->
+                    <div class="method-fields cash-note"
+                         id="fields-cash" hidden>
+
+                        <i class="bi bi-info-circle-fill"></i>
+
+                        <p>
+                            Pay your parking fee directly to the attendant
+                            at the exit counter. Your parking session will
+                            be released after payment confirmation.
+                        </p>
+
+                    </div>
+
+                    <!-- PAYMENT SUMMARY -->
+                    <div class="pay-summary">
+                        <span>Total to pay</span>
+                        <strong id="pay-total">&#8369;0.00</strong>
+                    </div>
+
+                    <input type="hidden" name="amount"
+                           id="pay-amount" value="0">
+
+                    <div class="form-actions">
+
+                        <button type="submit" class="btn-primary"
+                                id="pay-btn" disabled>
+
+                            <i class="bi bi-lock-fill"></i>
+
+                            <span id="pay-btn-text">
+                                Nothing to pay yet
+                            </span>
+
+                        </button>
+
+                    </div>
+
+                    <p class="secure-note">
+                        <i class="bi bi-shield-check"></i>
+                        Your payment details are kept secure.
+                    </p>
+
+                </form>
+
+                {% else %}
+
+                <div class="empty compact">
+                    <i class="bi bi-receipt"></i>
+                    <p>You have no active parking session, so there is nothing to pay.</p>
+
+                    <a href="{% url 'driver_home' %}" class="btn-sm">
+                        <i class="bi bi-search"></i> Find a slot
+                    </a>
+                </div>
+
+                {% endif %}
+
+            </div>
+
+        </section>
+
+        <!-- DRIVER PAYMENT HISTORY -->
+        <section class="card">
+
+            <div class="card-head">
+                <h3>My Payment History</h3>
+            </div>
+
+            <div class="table-wrap">
+
+                <table class="table">
+
+                    <thead>
+                        <tr>
+                            <th>Receipt</th>
+                            <th>Vehicle</th>
+                            <th>Slot</th>
+                            <th>Parked</th>
+                            <th>Method</th>
+                            <th>Amount</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+
+                        {% for p in payments %}
+
+                        <tr>
+
+                            <td>
+                                <b>#{{ p.pk }}</b><br>
+                                <small class="muted">
+                                    {{ p.created_at|date:"M d, h:i A" }}
+                                </small>
+                            </td>
+
+                            <td>
+                                <span class="plate">
+                                    {{ p.allocation.vehicle.plate_number }}
+                                </span>
+                            </td>
+
+                            <td>
+                                <b>{{ p.allocation.slot.slot_number }}</b>
+                            </td>
+
+                            <td>
+                                {{ p.allocation.entry_time|timesince:p.allocation.exit_time }}
+                            </td>
+
+                            <td>{{ p.get_method_display }}</td>
+
+                            <td>
+                                {% if p.amount > 0 %}
+                                    <b>&#8369;{{ p.amount }}</b>
+                                {% else %}
+                                    <span class="badge-free">FREE</span>
+                                {% endif %}
+                            </td>
+
+                            <td>
+                                {% if p.is_paid %}
+                                    <span class="badge active">Paid</span>
+                                {% else %}
+                                    <span class="badge pending">Pending</span>
+                                {% endif %}
+                            </td>
+
+                        </tr>
+
+                        {% empty %}
+
+                        <tr>
+                            <td colspan="7" class="empty-row">
+                                No payments yet.
+                            </td>
+                        </tr>
+
+                        {% endfor %}
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        </section>
+
+        {% endif %}
+
+        <!-- FOOTER -->
+        <footer class="footer">
+            &copy; {% now "Y" %} SmartPark &middot;
+            Smart Parking Slot Allocation System
+        </footer>
+
+    </main>
+</div>
+
+<!-- LOGOUT CONFIRMATION MODAL -->
+<div class="modal-overlay" id="logout-modal"
+     role="dialog" aria-modal="true"
+     aria-labelledby="logout-title"
+     aria-describedby="logout-desc">
+
+    <div class="modal-box">
+
+        <div class="modal-icon">
+            <i class="bi bi-box-arrow-right"></i>
+        </div>
+
+        <h3 id="logout-title">Log out?</h3>
+
+        <p id="logout-desc">
+            Are you sure you want to log out of SmartPark?
+        </p>
+
+        <div class="modal-actions">
+
+            <button type="button" class="btn-cancel"
+                    id="logout-cancel">
+                Cancel
+            </button>
+
+            <button type="button" class="btn-confirm"
+                    id="logout-confirm">
+                Yes, log out
+            </button>
+
+        </div>
+
+    </div>
+</div>
+
+<!-- JAVASCRIPT -->
+<script src="{% static 'js/payment.js' %}"></script>
+<script src="{% static 'js/notifications.js' %}"></script>
+
+{% if is_admin %}
+
+<script>
+/* ADMIN PAYMENTS: SEARCH, FILTER, PAGINATION AND CSV EXPORT */
+
+(function () {
+    'use strict';
+
+    // CHART SIZES
+    function applySizes() {
+
+        document.querySelectorAll('[data-h]').forEach(function (el) {
+            el.style.height =
+                (parseFloat(el.getAttribute('data-h')) || 0) + '%';
+        });
+
+        document.querySelectorAll('[data-w]').forEach(function (el) {
+            el.style.width =
+                (parseFloat(el.getAttribute('data-w')) || 0) + '%';
+        });
+
+    }
+
+    requestAnimationFrame(applySizes);
+
+    // PENDING EMPTY STATE
+    var pendingList = document.getElementById('adm-pending-list');
+    var pendingEmpty = document.getElementById('adm-pending-empty');
+
+    if (
+        pendingList &&
+        pendingEmpty &&
+        !pendingList.querySelector('.adm-pending-item')
+    ) {
+        pendingList.hidden = true;
+        pendingEmpty.hidden = false;
+    }
+
+    // TABLE
+    var tbody = document.getElementById('adm-rows');
+
+    if (!tbody) return;
+
+    var rows = Array.prototype.slice.call(
+        tbody.querySelectorAll('tr[data-row]')
+    );
+
+    var noMatch = document.getElementById('adm-nomatch');
+    var qEl = document.getElementById('adm-q');
+    var stEl = document.getElementById('adm-status');
+    var meEl = document.getElementById('adm-method');
+    var info = document.getElementById('adm-info');
+    var prev = document.getElementById('adm-prev');
+    var next = document.getElementById('adm-next');
+    var exp = document.getElementById('adm-export');
+
+    var PAGE = 10;
+    var page = 1;
+
+    // FILTER MATCHING
+    function matches(r) {
+
+        var q = (qEl.value || '').trim().toLowerCase();
+        var st = stEl.value;
+        var me = meEl.value;
+
+        if (
+            q &&
+            r.textContent.toLowerCase().indexOf(q) === -1
+        ) {
+            return false;
+        }
+
+        if (
+            me &&
+            r.getAttribute('data-method') !== me
+        ) {
+            return false;
+        }
+
+        if (st === 'free') {
+
+            if (r.getAttribute('data-free') !== '1') {
+                return false;
+            }
+
+        } else if (
+            st &&
+            r.getAttribute('data-status') !== st
+        ) {
+            return false;
+        }
+
+        return true;
+    }
+
+    function filtered() {
+        return rows.filter(matches);
+    }
+
+    // RENDER TABLE
+    function render() {
+
+        var list = filtered();
+
+        var pages = Math.max(
+            1,
+            Math.ceil(list.length / PAGE)
+        );
+
+        if (page > pages) {
+            page = pages;
+        }
+
+        rows.forEach(function (r) {
+            r.style.display = 'none';
+        });
+
+        list.slice(
+            (page - 1) * PAGE,
+            page * PAGE
+        ).forEach(function (r) {
+            r.style.display = '';
+        });
+
+        if (noMatch) {
+            noMatch.style.display =
+                (rows.length && !list.length) ? '' : 'none';
+        }
+
+        var from = list.length
+            ? (page - 1) * PAGE + 1
+            : 0;
+
+        var to = Math.min(
+            page * PAGE,
+            list.length
+        );
+
+        info.textContent = list.length
+            ? 'Showing ' + from + '–' + to +
+              ' of ' + list.length + ' payments'
+            : 'No payments to show';
+
+        prev.disabled = page <= 1;
+        next.disabled = page >= pages;
+    }
+
+    function resetAndRender() {
+        page = 1;
+        render();
+    }
+
+    // EVENT LISTENERS
+    qEl.addEventListener('input', resetAndRender);
+    stEl.addEventListener('change', resetAndRender);
+    meEl.addEventListener('change', resetAndRender);
+
+    prev.addEventListener('click', function () {
+        if (page > 1) {
+            page--;
+            render();
+        }
+    });
+
+    next.addEventListener('click', function () {
+        page++;
+        render();
+    });
+
+    // CSV EXPORT
+    function csvCell(v) {
+
+        v = String(v).replace(/\s+/g, ' ').trim();
+
+        return '"' + v.replace(/"/g, '""') + '"';
+    }
+
+    exp.addEventListener('click', function () {
+
+        var heads = Array.prototype.slice.call(
+            document.querySelectorAll('#adm-table thead th')
+        )
+        .slice(0, -1)
+        .map(function (th) {
+            return csvCell(th.textContent);
+        });
+
+        var lines = [heads.join(',')];
+
+        filtered().forEach(function (r) {
+
+            var cells = Array.prototype.slice.call(
+                r.children
+            )
+            .slice(0, -1)
+            .map(function (td) {
+                return csvCell(td.textContent);
+            });
+
+            lines.push(cells.join(','));
+
+        });
+
+        var blob = new Blob(
+            ['﻿' + lines.join('\n')],
+            { type: 'text/csv;charset=utf-8;' }
+        );
+
+        var a = document.createElement('a');
+
+        a.href = URL.createObjectURL(blob);
+        a.download = 'smartpark-payments.csv';
+
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        setTimeout(function () {
+            URL.revokeObjectURL(a.href);
+        }, 1000);
+
+    });
+
+    render();
+
+})();
+</script>
+
+{% endif %}
+
+</body>
+</html>

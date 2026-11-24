@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Page Not Found | SmartPark</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --navy-1: #1a1464;
+      --navy-2: #0f1b4d;
+      --navy-3: #0e2a4a;
+      --blue: #3b82f6;
+      --indigo: #4f6ef7;
+      --purple: #8b5cf6;
+      --bg: #f1f3fb;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --red: #ef4444;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      font-family: "Plus Jakarta Sans", "Segoe UI", system-ui, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow-x: hidden;
+    }
+
+    /* ---------- Main area ---------- */
+    .main {
+      position: relative;
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 85% 10%, rgba(139, 92, 246, 0.12), transparent 40%),
+        radial-gradient(circle at 10% 90%, rgba(59, 130, 246, 0.10), transparent 40%),
+        var(--bg);
+    }
+
+    /* Floating background blobs */
+    .blob {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(60px);
+      opacity: 0.35;
+      pointer-events: none;
+    }
+    .blob.b1 {
+      width: 320px; height: 320px;
+      background: var(--purple);
+      top: -80px; right: -60px;
+      animation: drift1 12s ease-in-out infinite;
+    }
+    .blob.b2 {
+      width: 280px; height: 280px;
+      background: var(--blue);
+      bottom: -80px; left: -60px;
+      animation: drift2 14s ease-in-out infinite;
+    }
+
+    /* ---------- Card ---------- */
+    .card {
+      position: relative;
+      width: 100%;
+      max-width: 560px;
+      text-align: center;
+      background: var(--card);
+      border-radius: 24px;
+      padding: 52px 36px 110px;
+      border-top: 4px solid transparent;
+      border-image: linear-gradient(90deg, #22c55e, #3b82f6, #8b5cf6) 1;
+      box-shadow: 0 20px 50px rgba(79, 110, 247, 0.12);
+      overflow: hidden;
+      animation: cardIn 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    /* Staggered fade-up for the content */
+    .card > .icon,
+    .card > .code,
+    .card > h1,
+    .card > p,
+    .card > .actions {
+      opacity: 0;
+      animation: fadeUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+    .card > .icon    { animation-delay: 0.25s; }
+    .card > .code    { animation-delay: 0.40s; }
+    .card > h1       { animation-delay: 0.55s; }
+    .card > p        { animation-delay: 0.70s; }
+    .card > .actions { animation-delay: 0.85s; }
+
+    /* ---------- Icon ---------- */
+    .icon {
+      position: relative;
+      width: 76px; height: 76px;
+      margin: 0 auto 18px;
+      border-radius: 20px;
+      background: linear-gradient(135deg, var(--indigo), var(--purple));
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-size: 40px; font-weight: 800;
+      box-shadow: 0 10px 24px rgba(99, 102, 241, 0.4);
+    }
+    /* Floating + pulse ring */
+    .icon-inner { display: inline-block; animation: swing 3s ease-in-out infinite; transform-origin: 50% 80%; }
+    .icon::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 20px;
+      border: 2px solid var(--indigo);
+      animation: ring 2.2s ease-out infinite;
+    }
+
+    /* ---------- 404 number ---------- */
+    .code {
+      font-size: 92px;
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: 3px;
+    }
+    .code span {
+      display: inline-block;
+      color: #5b6cf5;
+      animation: bounce 2.4s ease-in-out infinite;
+    }
+    .code span:nth-child(1) { color: var(--blue); }
+    .code span:nth-child(2) { color: var(--indigo); animation-delay: 0.2s; }
+    .code span:nth-child(3) { color: var(--purple); animation-delay: 0.4s; }
+
+    h1 { font-size: 24px; font-weight: 700; margin: 14px 0 10px; }
+
+    p {
+      font-size: 15px;
+      line-height: 1.7;
+      color: var(--muted);
+      margin-bottom: 30px;
+    }
+
+    /* ---------- Buttons ---------- */
+    .actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+    .btn {
+      display: inline-block;
+      padding: 13px 26px;
+      border-radius: 12px;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 700;
+      text-decoration: none;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    }
+    .btn:hover { transform: translateY(-3px); }
+    .btn:active { transform: translateY(0) scale(0.97); }
+
+    .btn-primary {
+      color: #fff;
+      border: none;
+      background: linear-gradient(135deg, var(--indigo), var(--purple));
+      box-shadow: 0 8px 20px rgba(99, 102, 241, 0.35);
+      animation: glow 2.5s ease-in-out infinite;
+    }
+    .btn-primary:hover { box-shadow: 0 12px 28px rgba(99, 102, 241, 0.55); }
+
+    .btn-secondary {
+      color: #4338ca;
+      background: #eef0ff;
+      border: 1px solid #e0e4ff;
+    }
+    .btn-secondary:hover { background: #e2e6ff; }
+
+    /* ---------- Road + driving car ---------- */
+    .road {
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      height: 70px;
+      background: #1e293b;
+    }
+    .road::before {
+      content: "";
+      position: absolute;
+      left: 0; right: 0; top: 50%;
+      height: 4px;
+      transform: translateY(-50%);
+      background: repeating-linear-gradient(
+        90deg,
+        #fbbf24 0 28px,
+        transparent 28px 56px
+      );
+      background-size: 56px 4px;
+      animation: roadMove 0.8s linear infinite;
+    }
+    .car {
+      position: absolute;
+      bottom: 28px;
+      left: -90px;
+      width: 80px;
+      animation: drive 6s linear infinite;
+    }
+    .car svg { display: block; width: 100%; height: auto; animation: bump 0.4s ease-in-out infinite; }
+    .wheel { transform-box: fill-box; transform-origin: center; animation: spin 0.5s linear infinite; }
+
+    /* ---------- Keyframes ---------- */
+    @keyframes cardIn {
+      from { opacity: 0; transform: translateY(40px) scale(0.96); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes swing {
+      0%, 100% { transform: rotate(-12deg); }
+      50%      { transform: rotate(12deg); }
+    }
+    @keyframes ring {
+      0%   { transform: scale(1);   opacity: 0.7; }
+      100% { transform: scale(1.6); opacity: 0; }
+    }
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50%      { transform: translateY(-10px); }
+    }
+    @keyframes shimmer {
+      from { background-position: 0% center; }
+      to   { background-position: 200% center; }
+    }
+    @keyframes glow {
+      0%, 100% { box-shadow: 0 8px 20px rgba(99, 102, 241, 0.35); }
+      50%      { box-shadow: 0 8px 30px rgba(139, 92, 246, 0.65); }
+    }
+    @keyframes drift1 {
+      0%, 100% { transform: translate(0, 0); }
+      50%      { transform: translate(-50px, 40px); }
+    }
+    @keyframes drift2 {
+      0%, 100% { transform: translate(0, 0); }
+      50%      { transform: translate(60px, -40px); }
+    }
+    @keyframes drive {
+      from { left: -90px; }
+      to   { left: 100%; }
+    }
+    @keyframes roadMove {
+      from { background-position: 0 0; }
+      to   { background-position: -56px 0; }
+    }
+    @keyframes bump {
+      0%, 100% { transform: translateY(0); }
+      50%      { transform: translateY(-1.5px); }
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ---------- Responsive ---------- */
+    @media (max-width: 760px) {
+      body { flex-direction: column; }
+      .main { padding: 20px; }
+      .card { padding: 40px 20px 100px; }
+      .code { font-size: 68px; }
+    }
+
+    /* Respect users who prefer less motion */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <main class="main">
+    <div class="blob b1"></div>
+    <div class="blob b2"></div>
+
+    <section class="card">
+      <div class="icon"><span class="icon-inner">?</span></div>
+      <div class="code"><span>4</span><span>0</span><span>4</span></div>
+      <h1>Oops! This parking spot doesn't exist</h1>
+      <p>
+        The page you're looking for was moved, removed, or never existed.
+        Let's get you back to a valid slot.
+      </p>
+      <div class="actions">
+        {% if user.is_authenticated %}
+          {% if user.is_staff or user.is_superuser %}
+            <a href="{% url 'dashboard' %}" class="btn btn-primary">Back to Dashboard</a>
+          {% else %}
+            <a href="{% url 'driver_home' %}" class="btn btn-primary">Back to Dashboard</a>
+          {% endif %}
+        {% else %}
+          <a href="{% url 'login' %}" class="btn btn-primary">Go to Login</a>
+        {% endif %}
+        <a href="javascript:history.back()" class="btn btn-secondary">Go Back</a>
+      </div>
+
+      <!-- Animated road with a car driving by -->
+      <div class="road">
+        <div class="car">
+          <svg viewBox="0 0 80 40" xmlns="http://www.w3.org/2000/svg">
+            <path d="M6 26 L10 16 Q12 12 17 12 L46 12 Q51 12 54 16 L62 22 L72 24 Q76 25 76 29 L76 31 L6 31 Z" fill="#6366f1"/>
+            <path d="M16 15 L45 15 L52 21 L12 21 Z" fill="#c7d2fe"/>
+            <rect x="72" y="25" width="4" height="4" rx="1" fill="#fde047"/>
+            <rect x="6" y="25" width="3" height="4" rx="1" fill="#ef4444"/>
+            <g class="wheel"><circle cx="20" cy="32" r="6" fill="#0f172a"/><circle cx="20" cy="32" r="2.5" fill="#94a3b8"/><rect x="19.2" y="26.5" width="1.6" height="5" fill="#94a3b8"/></g>
+            <g class="wheel"><circle cx="60" cy="32" r="6" fill="#0f172a"/><circle cx="60" cy="32" r="2.5" fill="#94a3b8"/><rect x="59.2" y="26.5" width="1.6" height="5" fill="#94a3b8"/></g>
+          </svg>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

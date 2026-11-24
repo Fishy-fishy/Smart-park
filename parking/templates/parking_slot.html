@@ -50,7 +50,7 @@
 
         .ps-type { display:inline-flex; align-items:center; gap:6px; color:#4a5468; }
         .ps-slotno { font-weight:800; font-size:15px; }
-        .ps-act { display:inline-block; padding:6px 12px; border-radius:8px; border:0; font:inherit; font-size:12px; font-weight:700; cursor:pointer; }
+        .ps-act { display:inline-block; padding:6px 12px; border-radius:8px; border:0; font:inherit; font-size:12px; font-weight:700; cursor:pointer; text-decoration:none; }
         .ps-act.warn   { background:#fff3de; color:#b45309; }
         .ps-act.ok     { background:#e3f8ea; color:#15803d; }
         .ps-act.danger { background:#fdebeb; color:#b91c1c; }
@@ -61,6 +61,19 @@
         .ps-locked { color:#9aa3b5; font-size:12px; }
         .ps-count { color:#7b8498; font-size:13px; }
         .ps-section-gap { margin-top:18px; }
+
+        /* Active sessions (who is parked and what they owe) */
+        .ps-summary { display:flex; gap:10px; flex-wrap:wrap; }
+        .ps-chip {
+            display:inline-flex; align-items:center; gap:8px; padding:8px 14px; border-radius:12px;
+            background:#f4f6fb; font-size:13px; color:#4a5468; font-weight:600;
+        }
+        .ps-chip b { font-size:15px; color:#1e2433; }
+        .ps-chip.due { background:#fdebeb; color:#b91c1c; }
+        .ps-chip.due b { color:#b91c1c; }
+        .ps-amount-due { font-weight:800; }
+        .ps-amount-due.owes { color:#b91c1c; }
+        .ps-amount-due.clear { color:#15803d; }
 
         .ps-live { display:inline-flex; align-items:center; gap:6px; font-size:.78rem; color:#64748b; margin-left:10px; }
         .ps-live i { width:8px; height:8px; border-radius:50%; background:#22c55e; animation:psPulse 1.6s infinite; }
@@ -105,7 +118,7 @@
         <div class="brand">
             <div class="brand-logo"><i class="bi bi-p-square-fill"></i></div>
             <div>
-                <h1>SmartPark</h1>
+                <h1>{{ cfg.facility_name|default:"SmartPark" }}</h1>
                 <span>Slot Allocation System</span>
             </div>
         </div>
@@ -129,9 +142,14 @@
     {% else %}
         <a href="{% url 'my_history' %}" class="nav-link"><i class="bi bi-clock-history"></i> My History</a>
     {% endif %}
-    <a href="#" class="nav-link"><i class="bi bi-credit-card"></i> Payments</a>
-    <a href="#" class="nav-link"><i class="bi bi-bar-chart-line"></i> Reports</a>
-    <a href="#" class="nav-link"><i class="bi bi-gear"></i> Settings</a>
+    <a href="{% url 'payments' %}" class="nav-link"><i class="bi bi-credit-card"></i> Payments</a>
+   
+             <a href="{% url 'settings' %}"
+   class="nav-link {% if url_name == 'settings' %}active{% endif %}"
+   {% if url_name == 'settings' %}aria-current="page"{% endif %}>
+    <i class="bi bi-gear"></i>
+    Settings
+</a>
 </nav>
           
     </aside>
@@ -221,8 +239,88 @@
 
         {% if is_admin %}
 
+        <!-- ===== Currently parked: who is parked and what they owe (admin) ===== -->
+        <section class="card">
+            <div class="card-head">
+                <div>
+                    <h3>Currently Parked</h3>
+                    <span class="ps-count">Who is parked right now and what they still owe</span>
+                </div>
+                <div class="ps-summary" id="ps-sessions-summary">
+                    <span class="ps-chip"><i class="bi bi-car-front-fill"></i> Parked <b>{{ active_sessions|length }}</b></span>
+                    <span class="ps-chip {% if sessions_total_due > 0 %}due{% endif %}"><i class="bi bi-cash-coin"></i> Total unpaid <b>&#8369;{{ sessions_total_due|floatformat:2 }}</b></span>
+                </div>
+            </div>
+
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Vehicle</th>
+                            <th>Driver</th>
+                            <th>Slot</th>
+                            <th>Parked Since</th>
+                            <th>Duration</th>
+                            <th>Fee</th>
+                            <th>Paid</th>
+                            <th>Amount Due</th>
+                            <th>Status</th>
+                            <th class="right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ps-sessions-body">
+                        {% for s in active_sessions %}
+                        <tr>
+                            <td>
+                                <div class="cell-vehicle">
+                                    <span class="plate">{{ s.plate }}</span>
+                                    <small>{{ s.vehicle_type }}</small>
+                                </div>
+                            </td>
+                            <td>{{ s.driver }}</td>
+                            <td><b>{{ s.slot }}</b><br><small class="muted">{{ s.zone }}</small></td>
+                            <td>{{ s.entry_time|date:"M d, h:i A" }}</td>
+                            <td>{{ s.duration }}</td>
+                            <td>&#8369;{{ s.fee|floatformat:2 }}</td>
+                            <td>&#8369;{{ s.paid|floatformat:2 }}</td>
+                            <td><span class="ps-amount-due {% if s.due > 0 %}owes{% else %}clear{% endif %}">&#8369;{{ s.due|floatformat:2 }}</span></td>
+                            <td>
+                                {% if s.state == 'free' %}
+                                    <span class="ps-status available">Free time</span>
+                                {% elif s.state == 'paid' %}
+                                    <span class="ps-status available">Paid</span>
+                                {% elif s.state == 'pending' %}
+                                    <span class="ps-status reserved">Payment pending</span>
+                                {% else %}
+                                    <span class="ps-status occupied">Owes</span>
+                                {% endif %}
+                            </td>
+                            <td class="right">
+                                <div class="ps-actions">
+                                    {% if s.state == 'pending' %}
+                                        <a href="{% url 'payments' %}" class="ps-act warn"><i class="bi bi-credit-card"></i> Review</a>
+                                    {% endif %}
+                                    <form method="post" action="{% url 'release_slot' s.allocation_pk %}"
+                                          onsubmit="return confirm('Release {{ s.plate }} from slot {{ s.slot }}?{% if s.due > 0 %} It still owes \u20b1{{ s.due|floatformat:2 }}.{% endif %}');">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                        <button type="submit" class="ps-act rel"><i class="bi bi-box-arrow-right"></i> Release</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="10" class="empty-row">No vehicles are parked right now.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
         <!-- ===== Add zone (admin) ===== -->
-        <section class="card ps-add">
+        <section class="card ps-add ps-section-gap">
             <details {% if not zones_admin %}open{% endif %}>
                 <summary>
                     <i class="bi bi-geo-alt-fill" style="color:#4f6df5;font-size:20px"></i>
@@ -585,19 +683,25 @@
 
     /* =========================================================
        LIVE UPDATES
-       Watches the live slot map data. When any slot changes status
-       (a driver allocated or released a slot), the stat cards, the
-       zone table and the slot table are refreshed in place, keeping
-       your current search / filters.
+       - When any slot changes status (a driver allocated or released
+         a slot), the page sections are refreshed in place.
+       - Every 30 seconds the sections are refreshed anyway, so the
+         "Currently Parked" fees and amounts due keep up with time.
+       Your current search / filters are kept.
        ========================================================= */
     (function () {
         var API_URL    = "{% url 'slot_map_data' %}";
         var REFRESH_MS = 5000;
-        var REPLACE_IDS = ['ps-stats', 'ps-count', 'ps-tbody', 'ps-zones-body'];
+        var FULL_MS    = 30000;
+        var REPLACE_IDS = [
+            'ps-stats', 'ps-count', 'ps-tbody', 'ps-zones-body',
+            'ps-sessions-body', 'ps-sessions-summary'
+        ];
 
         var liveBox  = document.getElementById('ps-live');
         var liveText = document.getElementById('ps-live-text');
         var lastSig  = null;
+        var lastFull = Date.now();
         var timer    = null;
         var busy     = false;
 
@@ -640,8 +744,14 @@
                 .then(function (data) {
                     var sig = signature(data);
                     var changed = (lastSig !== null && sig !== lastSig);
+                    var stale = (Date.now() - lastFull) >= FULL_MS;
                     lastSig = sig;
-                    return changed ? softReload() : null;
+
+                    if (changed || stale) {
+                        lastFull = Date.now();
+                        return softReload();
+                    }
+                    return null;
                 })
                 .then(function () { setOnline(true); })
                 .catch(function () { setOnline(false); })

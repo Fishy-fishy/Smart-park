@@ -18,6 +18,11 @@ SECRET_KEY = os.environ['DJANGO_SECRET_KEY']
 
 DEBUG = os.getenv('DJANGO_DEBUG', 'False').lower() == 'true'
 
+ALLOWED_HOSTS = os.getenv(
+    'DJANGO_ALLOWED_HOSTS',
+    '127.0.0.1,localhost,192.168.254.116'
+).split(',')
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
@@ -51,11 +56,13 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
+    'parking.middleware.OperatingHoursMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
@@ -78,6 +85,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'parking.processor.facility',
             ],
         },
     },
@@ -122,6 +130,7 @@ USE_TZ = True
 # STATIC FILES
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 STATICFILES_DIRS = [
     BASE_DIR / 'static',
@@ -151,3 +160,8 @@ EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 # DEFAULT PRIMARY KEY
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+PARKING_FREE_MINUTES = 60
+PARKING_HOURLY_RATE = 20
+PARKING_AUTO_CONFIRM_ONLINE = False

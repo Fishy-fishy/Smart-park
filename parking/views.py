@@ -1,12 +1,24 @@
-from datetime import timedelta
+import math
+import re
+from collections import defaultdict
+from datetime import datetime, time, timedelta
+from decimal import Decimal, InvalidOperation
 from functools import wraps
-from django.utils.dateparse import parse_date, parse_datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from .hours import facility_status, closed_message, is_admin_account
 from django.contrib import messages
-from django.contrib.auth import get_user_model, login
+from django.contrib.auth import (
+    get_user_model,
+    login,
+    logout,
+    update_session_auth_hash,
+)
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.forms import SetPasswordForm
+from django.contrib.auth.forms import PasswordChangeForm, SetPasswordForm
 from django.contrib.auth.views import LoginView
+from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
+from django.core.validators import validate_email
 from django.db import transaction
 from django.db.models import (
     Avg,
@@ -16,12 +28,14 @@ from django.db.models import (
     F,
     Prefetch,
     Q,
+    Sum,
 )
 from django.db.models.deletion import ProtectedError
-from django.http import JsonResponse
+from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.dateparse import parse_date, parse_datetime
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.timesince import timesince, timeuntil
 from django.views.decorators.http import require_POST
@@ -29,14 +43,23 @@ from django.views.decorators.http import require_POST
 from .forms import DriverSignUpForm
 from .models import (
     Allocation,
+    DriverPreference,
     ParkingSlot,
+    Payment,
     Profile,
+    Reservation,
+    SystemSettings,
     Vehicle,
     Zone,
-    Reservation,
 )
 
 User = get_user_model()
+
+
+def slot_sort_key(slot_number):
+    """A-04 -> 4, B-5 -> 5, E0-7 -> 7, E-010 -> 10 (uses the last number)."""
+    nums = re.findall(r"\d+", slot_number or "")
+    return (int(nums[-1]) if nums else 0, slot_number or "")
 
 
 # ==========================================================
@@ -275,6 +298,18 @@ class SmartLoginView(LoginView):
                 )
 
                 return self.form_invalid(form)
+
+        # ===== NEW: check operating hours (drivers only) =====
+        if not is_admin_account(user):
+
+            is_open, next_open, cfg = facility_status()
+
+            if not is_open:
+
+                form.add_error(None, closed_message(next_open, cfg))
+
+                return self.form_invalid(form)
+        # =====================================================
 
         # Check selected login role.
         if get_role(user) != chosen:
@@ -742,6 +777,27 @@ def delete_user(request, pk):
 
     username = user.username
 
+    delete_account_data(user)
+
+    messages.success(
+        request,
+        f"Account '{username}' and all of its vehicles and "
+        "allocation history have been deleted."
+    )
+
+    return redirect("admin_request")
+
+
+def delete_account_data(user):
+    """
+    Deletes a user together with their vehicles, allocations and
+    reservations, and frees any slot they were holding (a slot reserved by
+    a deleted reservation would otherwise stay "reserved").
+
+    Used by delete_user() (main admin) and by the driver's own
+    "Delete account" button on the Settings page.
+    """
+
     with transaction.atomic():
 
         vehicles = Vehicle.objects.filter(user=user)
@@ -759,7 +815,6 @@ def delete_user(request, pk):
             ).values_list("slot_id", flat=True)
         )
 
-        # Allocation.vehicle is PROTECT, so remove allocations first.
         # Their payments are removed automatically (CASCADE).
         Allocation.objects.filter(vehicle__in=vehicles).delete()
 
@@ -793,14 +848,6 @@ def delete_user(request, pk):
                 slot.save(update_fields=["status"])
 
         user.delete()
-
-    messages.success(
-        request,
-        f"Account '{username}' and all of its vehicles and "
-        "allocation history have been deleted."
-    )
-
-    return redirect("admin_request")
 
 
 # ==========================================================
@@ -988,6 +1035,11 @@ def parking_slot(request):
         ).count(),
     }
 
+    if is_admin:
+        sessions, sessions_due = build_active_sessions()
+        context["active_sessions"] = sessions
+        context["sessions_total_due"] = sessions_due
+
     return render(
         request,
         "parking_slot.html",
@@ -1165,17 +1217,12 @@ def delete_slot(request, pk):
 # ==========================================================
 # LIVE SLOT MAP (shared by the JSON API and the dashboard)
 # ==========================================================
-
 def build_slot_map(user):
     """
     Builds the data used by the Live Slot Map.
-
-    Plate number, vehicle type and parked-since time are only included for
-    approved administrators, or for the driver who owns that vehicle, so
-    drivers cannot see other drivers' vehicle details.
+    Slots are sorted 1-10 inside each zone, and zones A, B, C...
     """
 
-    # Free slots whose reservations have ended, so the map is always current.
     auto_complete_expired_reservations()
 
     is_admin = is_approved_admin(user)
@@ -1193,7 +1240,6 @@ def build_slot_map(user):
             )
         )
         .filter(zone__is_active=True)
-        .order_by("zone__distance_rank", "zone_id", "distance_rank", "slot_number")
     )
 
     counts = {
@@ -1203,7 +1249,6 @@ def build_slot_map(user):
         ParkingSlot.Status.MAINTENANCE: 0,
     }
 
-    # Keep every active zone, even if it has no slots yet.
     zones = {
         zone.id: {
             "id": zone.id,
@@ -1231,6 +1276,7 @@ def build_slot_map(user):
             "number": slot.slot_number,
             "status": slot.status,
             "status_label": slot.get_status_display(),
+            "slot_type": slot.slot_type,
         }
 
         if slot.status == ParkingSlot.Status.OCCUPIED and slot.active_allocs:
@@ -1256,6 +1302,10 @@ def build_slot_map(user):
 
         zone_data["slots"].append(item)
 
+    # Sort slots 1-10 inside every zone.
+    for z in zones.values():
+        z["slots"].sort(key=lambda s: slot_sort_key(s["number"]))
+
     total = sum(counts.values())
     occupied = counts[ParkingSlot.Status.OCCUPIED]
 
@@ -1266,7 +1316,9 @@ def build_slot_map(user):
         "reserved": counts[ParkingSlot.Status.RESERVED],
         "maintenance": counts[ParkingSlot.Status.MAINTENANCE],
         "occupancy_rate": round(occupied * 100 / total) if total else 0,
-        "zones": list(zones.values()),
+        "slot_types": list(ParkingSlot.SlotType.values),
+        # Zones in A, B, C... order
+        "zones": sorted(zones.values(), key=lambda z: z["name"]),
     }
 
 
@@ -1489,7 +1541,14 @@ def _admin_notifications():
         status=ParkingSlot.Status.MAINTENANCE
     ).count()
 
-    if total and occupied * 100 >= total * 90:
+    # The alert level is set by the administrator in Settings > Alerts.
+    cfg = SystemSettings.load()
+
+    if (
+        cfg.al_occupancy
+        and total
+        and occupied * 100 >= total * cfg.al_occupancy_pct
+    ):
         items.append(_note(
             f"occ-high-{timezone.localdate()}", "danger",
             "bi-exclamation-triangle-fill",
@@ -1605,12 +1664,10 @@ def allocate_slot(request):
 
     # Basic validation
     if not plate:
-
         messages.error(
             request,
             "Please enter a plate number."
         )
-
         return redirect("driver_home")
 
     allowed_types = [
@@ -1621,31 +1678,64 @@ def allocate_slot(request):
     ]
 
     if allowed_types and vehicle_type not in allowed_types:
-
         messages.error(
             request,
             "Invalid vehicle type."
         )
-
         return redirect("driver_home")
 
     try:
-
         zone_id = int(zone_id) if zone_id else None
         slot_id = int(slot_id) if slot_id else None
 
     except (ValueError, TypeError):
-
         messages.error(
             request,
             "Invalid zone or slot selection."
         )
-
         return redirect("driver_home")
 
     with transaction.atomic():
 
-        # The vehicle must belong to this driver.
+        # -------------------------------------------------
+        # SYSTEM-WIDE LOCK
+        # Prevent simultaneous allocation requests.
+        # -------------------------------------------------
+        list(
+            Zone.objects.select_for_update().order_by("pk")
+        )
+
+        # -------------------------------------------------
+        # ONLY ONE ACTIVE PARKING SESSION ALLOWED
+        # -------------------------------------------------
+        active_allocation = (
+            Allocation.objects
+            .filter(exit_time__isnull=True)
+            .select_related(
+                "vehicle",
+                "slot",
+                "slot__zone"
+            )
+            .first()
+        )
+
+        if active_allocation:
+
+            messages.error(
+                request,
+                f"Parking is currently occupied by "
+                f"{active_allocation.vehicle.plate_number} "
+                f"at Slot {active_allocation.slot.slot_number} "
+                f"({active_allocation.slot.zone.name}). "
+                "Only one vehicle can park at a time. "
+                "Please wait until the current vehicle exits."
+            )
+
+            return redirect("driver_home")
+
+        # -------------------------------------------------
+        # CHECK VEHICLE OWNERSHIP
+        # -------------------------------------------------
         vehicle = (
             Vehicle.objects
             .select_for_update()
@@ -1664,6 +1754,7 @@ def allocate_slot(request):
 
                 return redirect("driver_home")
 
+            # Prevent duplicate active allocation for this vehicle.
             if Allocation.objects.filter(
                 vehicle=vehicle,
                 exit_time__isnull=True
@@ -1676,8 +1767,20 @@ def allocate_slot(request):
                 )
 
                 return redirect("driver_home")
+            
+            if vehicle_type != vehicle.vehicle_type:
+                messages.warning(
+                    request,
+                    f"{plate} is registered as "
+                    f"{vehicle.get_vehicle_type_display()}, so a "
+                    f"{vehicle.get_vehicle_type_display()} slot was used."
+                )
 
-        # Find a slot (rows are locked so two drivers can't take the same one).
+            vehicle_type = vehicle.vehicle_type
+
+        # -------------------------------------------------
+        # FIND AVAILABLE PARKING SLOT
+        # -------------------------------------------------
         candidates = (
             ParkingSlot.objects
             .select_for_update()
@@ -1690,7 +1793,7 @@ def allocate_slot(request):
 
         if slot_id:
 
-            # A slot picked on the Live Slot Map.
+            # Manually selected slot from Live Slot Map.
             slot = candidates.filter(pk=slot_id).first()
 
             if slot is None:
@@ -1705,7 +1808,7 @@ def allocate_slot(request):
 
         else:
 
-            # Auto allocation: nearest available slot (lowest distance rank).
+            # Automatic allocation: nearest available slot.
             if zone_id:
                 candidates = candidates.filter(zone_id=zone_id)
 
@@ -1725,7 +1828,9 @@ def allocate_slot(request):
 
                 return redirect("driver_home")
 
-        # Register the vehicle the first time it is used.
+        # -------------------------------------------------
+        # REGISTER VEHICLE IF IT DOES NOT EXIST
+        # -------------------------------------------------
         if vehicle is None:
 
             profile = getattr(request.user, "profile", None)
@@ -1738,9 +1843,14 @@ def allocate_slot(request):
                     request.user.get_full_name()
                     or request.user.username
                 ),
-                contact_number=getattr(profile, "phone", "") or "",
+                contact_number=getattr(
+                    profile, "phone", ""
+                ) or "",
             )
 
+        # -------------------------------------------------
+        # CREATE PARKING ALLOCATION
+        # -------------------------------------------------
         Allocation.objects.create(
             vehicle=vehicle,
             slot=slot,
@@ -1748,9 +1858,13 @@ def allocate_slot(request):
             entry_time=timezone.now(),
         )
 
+        # Mark slot as occupied.
         slot.status = ParkingSlot.Status.OCCUPIED
         slot.save(update_fields=["status"])
 
+    # -------------------------------------------------
+    # SUCCESS MESSAGE
+    # -------------------------------------------------
     messages.success(
         request,
         f"Slot {slot.slot_number} ({slot.zone.name}) "
@@ -1761,8 +1875,446 @@ def allocate_slot(request):
 
 
 # ==========================================================
+# PAYMENTS
+#
+# FEE RULES  (set by the administrator in Settings > Pricing)
+#   - the first "free minutes" (default 60) are free
+#   - after that, every started hour costs the hourly rate
+#   - a driver can pay more than once; only what is still unpaid is due
+#
+# The first time Settings is used, it starts from these settings.py values:
+#   PARKING_HOURLY_RATE = 20
+#   PARKING_FREE_MINUTES = 60
+# ==========================================================
+
+def get_free_minutes():
+    return int(SystemSettings.load().free_minutes)
+
+
+def get_hourly_rate():
+    return Decimal(str(SystemSettings.load().hourly_rate))
+
+
+def calculate_fee(allocation, until=None):
+    """Total fee for a parking session so far (or until `until`)."""
+
+    end = until or allocation.exit_time or timezone.now()
+
+    elapsed_seconds = max(
+        (end - allocation.entry_time).total_seconds(), 0
+    )
+
+    billable_minutes = max(
+        math.ceil(elapsed_seconds / 60) - get_free_minutes(), 0
+    )
+
+    hours = math.ceil(billable_minutes / 60)
+
+    return {
+        "billable_minutes": billable_minutes,
+        "hours": hours,
+        "amount": get_hourly_rate() * hours,
+    }
+
+
+def paid_total(allocation):
+    """Sum of CONFIRMED payments for this session."""
+
+    total = allocation.payments.filter(
+        is_paid=True
+    ).aggregate(t=Sum("amount"))["t"]
+
+    return total or Decimal("0.00")
+
+
+def amount_due(allocation, until=None):
+    """What the driver still owes (never negative)."""
+
+    due = calculate_fee(allocation, until)["amount"] - paid_total(allocation)
+
+    return max(due, Decimal("0.00"))
+
+
+# ----------------------------------------------------------
+# Admin payment statistics (revenue cards, 7-day chart, method split,
+# and the full list of payments waiting for confirmation).
+# Revenue only counts CONFIRMED payments (is_paid=True) and is dated by
+# the moment the admin confirmed it (paid_at).
+# ----------------------------------------------------------
+
+def day_bounds(day):
+    """Start (inclusive) and end (exclusive) of a local day, timezone-aware."""
+    start = timezone.make_aware(datetime.combine(day, time.min))
+    return start, start + timedelta(days=1)
+
+
+def admin_payment_stats():
+
+    today = timezone.localdate()
+    today_start, today_end = day_bounds(today)
+    month_start, _ = day_bounds(today.replace(day=1))
+
+    confirmed = Payment.objects.filter(is_paid=True)
+    pending = Payment.objects.filter(is_paid=False)
+
+    def total(qs):
+        return qs.aggregate(t=Sum("amount"))["t"] or Decimal("0.00")
+
+    # ---- last 7 days (oldest -> today) ----
+    days = [today - timedelta(days=i) for i in range(6, -1, -1)]
+
+    per_day = defaultdict(Decimal)
+
+    rows = confirmed.filter(
+        paid_at__gte=day_bounds(days[0])[0]
+    ).values_list("paid_at", "amount")
+
+    for paid_at, amount in rows:
+        per_day[timezone.localtime(paid_at).date()] += amount
+
+    amounts = [per_day.get(d) or Decimal("0.00") for d in days]
+    highest = max(amounts)
+
+    revenue_chart = [
+        {
+            "label": d.strftime("%a"),
+            "amount": amt,
+            "pct": round(max(float(amt / highest * 100), 3), 1) if amt else 0,
+        }
+        for d, amt in zip(days, amounts)
+    ]
+
+    # ---- payment method split (this month) ----
+    month_paid = confirmed.filter(paid_at__gte=month_start)
+
+    gcash_total = total(month_paid.filter(method=Payment.Method.GCASH))
+    cash_total = total(month_paid.filter(method=Payment.Method.CASH))
+    split = gcash_total + cash_total
+
+    return {
+        "rev_today": total(
+            confirmed.filter(paid_at__gte=today_start, paid_at__lt=today_end)
+        ),
+        "rev_month": total(month_paid),
+        "pending_amount": total(pending),
+        "pending_count": pending.count(),
+        "payments_today": Payment.objects.filter(
+            created_at__gte=today_start,
+            created_at__lt=today_end,
+        ).count(),
+
+        "revenue_chart": revenue_chart if highest else [],
+        "gcash_total": gcash_total,
+        "cash_total": cash_total,
+        "gcash_pct": round(float(gcash_total / split * 100), 1) if split else 0,
+        "cash_pct": round(float(cash_total / split * 100), 1) if split else 0,
+
+        # Every unconfirmed payment, not just the latest 200 rows.
+        "pending_payments": (
+            pending
+            .select_related(
+                "allocation__vehicle__user",
+                "allocation__slot__zone",
+            )
+            .order_by("created_at")
+        ),
+    }
+
+
+# ----------------------------------------------------------
+# Payments page
+# Driver: current session + own history.  Admin: all payments.
+# ----------------------------------------------------------
+
+@login_required
+def payments(request):
+
+    is_admin = is_approved_admin(request.user)
+
+    if get_role(request.user) == Profile.Role.ADMIN and not is_admin:
+
+        messages.error(
+            request,
+            "Your administrator account is not approved."
+        )
+
+        return redirect("login")
+
+    history = Payment.objects.select_related(
+        "allocation__vehicle__user",
+        "allocation__slot__zone",
+    )
+
+    my_current = None
+    already_paid = Decimal("0.00")
+    pending_payment = None
+
+    if not is_admin:
+
+        history = history.filter(allocation__vehicle__user=request.user)
+
+        my_current = (
+            Allocation.objects
+            .filter(vehicle__user=request.user, exit_time__isnull=True)
+            .select_related("vehicle", "slot__zone")
+            .order_by("-entry_time")
+            .first()
+        )
+
+        if my_current:
+            already_paid = paid_total(my_current)
+            pending_payment = my_current.payments.filter(
+                is_paid=False
+            ).first()
+
+    history = history.order_by("-created_at")
+
+    context = {
+        "is_admin": is_admin,
+        "my_current": my_current,
+        "already_paid": already_paid,
+        "pending_payment": pending_payment,
+        "hourly_rate": get_hourly_rate(),
+        "free_minutes": get_free_minutes(),
+        # Admins get more rows because the table has search, filters
+        # and pagination in the browser.
+        "payments": history[:200] if is_admin else history[:50],
+    }
+
+    if is_admin:
+        context.update(admin_payment_stats())
+
+    return render(request, "payment.html", context)
+
+
+# ----------------------------------------------------------
+# Make a payment (driver, own vehicle, open session only)
+# The amount is ALWAYS recalculated here. The "amount" posted by
+# the page is ignored, so it cannot be tampered with.
+# ----------------------------------------------------------
+@login_required
+@require_POST
+def make_payment(request, pk):
+
+    if get_role(request.user) != Profile.Role.DRIVER:
+        messages.error(
+            request,
+            "Only drivers can make payments."
+        )
+        return redirect(home_for(request.user))
+
+    with transaction.atomic():
+
+        allocation = get_object_or_404(
+            Allocation.objects.select_for_update().select_related(
+                "vehicle",
+                "slot"
+            ),
+            pk=pk
+        )
+
+        # Verify vehicle ownership.
+        if allocation.vehicle.user_id != request.user.id:
+            messages.error(
+                request,
+                "You are not allowed to pay for this parking session."
+            )
+            return redirect("payments")
+
+        # Session must still be active.
+        if allocation.exit_time is not None:
+            messages.warning(
+                request,
+                "This parking session has already ended."
+            )
+            return redirect("payments")
+
+        # Accept only GCash and Cash Counter.
+        method = request.POST.get("method", "").strip()
+
+        allowed_methods = (
+            Payment.Method.GCASH,
+            Payment.Method.CASH,
+        )
+
+        if method not in allowed_methods:
+            messages.error(
+                request,
+                "Please select GCash or Cash Counter."
+            )
+            return redirect("payments")
+
+        # Check payment method settings.
+        cfg = SystemSettings.load()
+
+        if (
+            (method == Payment.Method.GCASH and not cfg.pay_gcash)
+            or (method == Payment.Method.CASH and not cfg.pay_cash)
+        ):
+            messages.error(
+                request,
+                "That payment method is currently disabled."
+            )
+            return redirect("payments")
+
+        # Prevent duplicate pending payments.
+        if allocation.payments.filter(is_paid=False).exists():
+            messages.warning(
+                request,
+                "You already have a payment waiting for confirmation."
+            )
+            return redirect("payments")
+
+        # Calculate payment on the server.
+        due = amount_due(allocation)
+
+        if due <= 0:
+            messages.info(
+                request,
+                "You have nothing to pay right now."
+            )
+            return redirect("payments")
+
+        # Submit payment as pending.
+        # GCash QR payment does not require a reference number.
+        Payment.objects.create(
+            allocation=allocation,
+            amount=due,
+            method=method,
+            is_paid=False,
+            reference="",
+            paid_by=request.user,
+            paid_at=None,
+        )
+
+    messages.success(
+        request,
+        f"Your payment of ₱{due:.2f} has been submitted. "
+        "Please wait for administrator confirmation."
+    )
+
+    return redirect("payments")
+
+# ----------------------------------------------------------
+# Confirm / reject a pending payment (approved admins only)
+# e.g. after the driver hands cash to the attendant.
+# Rejecting removes the pending record so the driver can try again.
+# ----------------------------------------------------------
+
+@role_required("admin")
+@require_POST
+def payment_confirm(request, pk):
+
+    released = False
+
+    with transaction.atomic():
+
+        payment = get_object_or_404(
+            Payment.objects.select_for_update().select_related(
+                "allocation__vehicle",
+                "allocation__slot",
+            ),
+            pk=pk
+        )
+
+        if payment.is_paid:
+            messages.warning(
+                request,
+                "This payment has already been confirmed."
+            )
+            return redirect("payments")
+
+        payment.is_paid = True
+        payment.confirmed_by = request.user
+        payment.paid_at = timezone.now()
+        payment.save(
+            update_fields=["is_paid", "confirmed_by", "paid_at"]
+        )
+
+        # ---- Auto-release the vehicle once everything is paid ----
+        allocation = Allocation.objects.select_for_update().get(
+            pk=payment.allocation_id
+        )
+
+        if allocation.exit_time is None:
+
+            # Judge the fee at the moment the driver submitted the payment,
+            # so waiting for the attendant never adds extra charges.
+            still_due = amount_due(allocation, payment.created_at)
+
+            if still_due <= 0:
+
+                allocation.exit_time = timezone.now()
+                allocation.save(update_fields=["exit_time"])
+
+                slot = ParkingSlot.objects.select_for_update().get(
+                    pk=allocation.slot_id
+                )
+
+                if slot.status == ParkingSlot.Status.OCCUPIED:
+                    slot.status = ParkingSlot.Status.AVAILABLE
+                    slot.save(update_fields=["status"])
+
+                released = True
+
+    if released:
+        messages.success(
+            request,
+            f"Payment #{payment.pk} of ₱{payment.amount:.2f} confirmed. "
+            f"{allocation.vehicle.plate_number} has been released and "
+            f"slot {allocation.slot.slot_number} is available again."
+        )
+    else:
+        messages.success(
+            request,
+            f"Payment #{payment.pk} of ₱{payment.amount:.2f} confirmed."
+        )
+
+    return redirect("payments")
+
+
+@role_required("admin")
+@require_POST
+def payment_reject(request, pk):
+
+    with transaction.atomic():
+
+        payment = get_object_or_404(
+            Payment.objects.select_for_update(),
+            pk=pk
+        )
+
+        if payment.is_paid:
+
+            messages.warning(
+                request,
+                "A confirmed payment cannot be rejected."
+            )
+
+            return redirect("payments")
+
+        payment_number = payment.pk
+
+        payment.delete()
+
+    messages.warning(
+        request,
+        f"Payment #{payment_number} has been rejected. "
+        "The driver can submit another payment."
+    )
+
+    return redirect("payments")
+
+
+# ==========================================================
 # RELEASE A SLOT (vehicle leaves)
 # The owner of the vehicle or an approved administrator.
+#
+# Payment rules:
+#   - a driver cannot leave while a payment is still due
+#   - an administrator can still release it (with a warning), e.g. when
+#     the driver paid cash at the counter
+#   - a session that was free all the way gets a "free" record in history
 # ==========================================================
 
 def safe_next(request, default):
@@ -1826,8 +2378,56 @@ def release_slot(request, pk):
 
             return redirect(safe_next(request, home_for(request.user)))
 
-        allocation.exit_time = timezone.now()
+        now = timezone.now()
+        due = amount_due(allocation, now)
+        unpaid_warning = None
+
+        if due > 0:
+
+            if is_approved_admin(request.user):
+
+                unpaid_warning = (
+                    f"\u20b1{due:.2f} was still unpaid for {vehicle.plate_number}."
+                )
+
+            else:
+
+                if allocation.payments.filter(is_paid=False).exists():
+
+                    messages.warning(
+                        request,
+                        "Your payment is still waiting for confirmation. "
+                        "You can leave once it is confirmed."
+                    )
+
+                else:
+
+                    messages.error(
+                        request,
+                        f"Please pay \u20b1{due:.2f} before leaving. "
+                        "Your free parking time is over, so the extra "
+                        "time must be paid."
+                    )
+
+                return redirect("payments")
+
+        allocation.exit_time = now
         allocation.save(update_fields=["exit_time"])
+
+        # Nothing was ever charged: keep a "free" record for the history.
+        if (
+            not allocation.payments.exists()
+            and calculate_fee(allocation)["amount"] == 0
+        ):
+
+            Payment.objects.create(
+                allocation=allocation,
+                amount=Decimal("0.00"),
+                method=Payment.Method.FREE,
+                is_paid=True,
+                paid_by=allocation.vehicle.user,
+                paid_at=now,
+            )
 
         slot = allocation.slot
 
@@ -1842,6 +2442,9 @@ def release_slot(request, pk):
         f"{vehicle.plate_number} has left. "
         f"Slot {slot.slot_number} is available again."
     )
+
+    if unpaid_warning:
+        messages.warning(request, unpaid_warning)
 
     return redirect(safe_next(request, home_for(request.user)))
 
@@ -1863,30 +2466,76 @@ def driver_home(request):
     # build_slot_map() also auto-completes expired reservations.
     slot_map = build_slot_map(request.user)
 
+    # The driver's saved (non-archived) vehicles.
+    vehicles_qs = request.user.vehicles.filter(is_archived=False)
+
+    # The parking session that is still open (the "My Current Parking" card).
+    my_current = (
+        mine.filter(exit_time__isnull=True)
+        .order_by("-entry_time")
+        .first()
+    )
+
+    # Choices for the Vehicle Type dropdown: [(value, label), ...]
+    vehicle_types = list(
+        Vehicle._meta.get_field("vehicle_type").flatchoices
+    )
+
+    # PWD slots/type are only offered to drivers who have a PWD vehicle
+    # (or a profile flag named is_pwd, if you have one).
+    profile = getattr(request.user, "profile", None)
+    can_use_pwd = (
+        bool(getattr(profile, "is_pwd", False))
+        or vehicles_qs.filter(vehicle_type="pwd").exists()
+    )
+
+    # Zones and their slots, for the first paint.
+    # (Zone already has its own available_count property, so no annotation.)
+    zones = list(
+        Zone.objects
+        .filter(is_active=True)
+        .prefetch_related("slots")
+        .order_by("name")
+    )
+
+    for zone in zones:
+        zone.sorted_slots = sorted(
+            zone.slots.all(),
+            key=lambda s: slot_sort_key(s.slot_number),
+        )
+
     context = {
 
         "is_admin": False,
 
-        "vehicles": request.user.vehicles.filter(
-            is_archived=False
-        ),
+        "vehicles": vehicles_qs,
+        "vehicle_types": vehicle_types,
+        "can_use_pwd": can_use_pwd,
 
-        "current": mine.filter(
-            exit_time__isnull=True
-        ),
+        # My Current Parking card
+        "my_current": my_current,
+        "hourly_rate": get_hourly_rate(),
+        "free_minutes": get_free_minutes(),
 
-        "history": mine.filter(
-            exit_time__isnull=False
-        )[:10],
+        # Driver stat cards
+        "my_vehicles_count": vehicles_qs.count(),
+        "my_reservations_count": Reservation.objects.filter(
+            created_by=request.user,
+            status__in=[
+                Reservation.Status.PENDING,
+                Reservation.Status.CONFIRMED,
+            ],
+        ).count(),
+        "my_sessions_count": mine.count(),
 
         "recent_allocations": mine.order_by("-entry_time")[:5],
 
         # Live Slot Map / stat cards (first paint; JS keeps them fresh)
-        "zones": Zone.objects.filter(is_active=True),
-        "total_slots": slot_map["total"],
+        "zones": zones,
         "available_count": slot_map["available"],
         "occupied_count": slot_map["occupied"],
         "reserved_count": slot_map["reserved"],
+        "total_slots": slot_map["total"],
         "occupancy_rate": slot_map["occupancy_rate"],
     }
 
@@ -2000,10 +2649,10 @@ def _history_response(request, my_only):
         allocations = allocations.filter(slot__zone_id=int(zone_id))
 
     if date_from:
-        allocations = allocations.filter(entry_time__date__gte=date_from)
+        allocations = allocations.filter(entry_time__gte=day_bounds(date_from)[0])
 
-    if date_to:
-        allocations = allocations.filter(entry_time__date__lte=date_to)
+    if date_to: 
+        allocations = allocations.filter(entry_time__lt=day_bounds(date_to)[1])
 
     # ---------------- STAT CARDS ----------------
     # Based on everything the user is allowed to see (not the filters),
@@ -2315,14 +2964,11 @@ def vehicle_delete(request, pk):
 @login_required
 def reservation_page(request):
 
-    # Complete reservations whose end time has passed
-    # and free their slots before building the page.
     auto_complete_expired_reservations()
 
     user_role = get_role(request.user)
     is_admin = is_approved_admin(request.user)
 
-    # Prevent unapproved administrators from accessing reservations.
     if user_role == Profile.Role.ADMIN and not is_admin:
         messages.error(
             request,
@@ -2336,8 +2982,6 @@ def reservation_page(request):
     ):
         return redirect(home_for(request.user))
 
-    # Administrators can see all reservations.
-    # Drivers can only see their own reservations.
     if is_admin:
         reservations = Reservation.objects.select_related(
             "vehicle",
@@ -2356,7 +3000,6 @@ def reservation_page(request):
             created_by=request.user
         ).order_by("-created_at")
 
-    # Statistics
     total_reservations = reservations.count()
 
     pending_reservations = reservations.filter(
@@ -2377,16 +3020,14 @@ def reservation_page(request):
 
     context = {
         "is_admin": is_admin,
-
+        "now": timezone.now(),
         "reservations": reservations,
 
-        # Drivers can only select their own registered vehicles.
         "vehicles": Vehicle.objects.filter(
             user=request.user,
             is_archived=False
         ).order_by("plate_number"),
 
-        # Only currently available slots are offered.
         "slots": ParkingSlot.objects.filter(
             status=ParkingSlot.Status.AVAILABLE,
             zone__is_active=True
@@ -2835,3 +3476,584 @@ def reservation_complete(request, pk):
     )
 
     return redirect("reservation")
+
+
+def build_active_sessions():
+    """Every vehicle that is parked right now, with what it owes."""
+
+    now = timezone.now()
+
+    allocations = (
+        Allocation.objects
+        .filter(exit_time__isnull=True)
+        .select_related("vehicle", "vehicle__user", "slot", "slot__zone")
+        .prefetch_related("payments")
+        .order_by("entry_time")
+    )
+
+    sessions = []
+    total_due = Decimal("0.00")
+
+    for a in allocations:
+
+        fee = calculate_fee(a, now)
+        payments = list(a.payments.all())
+
+        paid = sum(
+            (p.amount for p in payments if p.is_paid),
+            Decimal("0.00")
+        )
+        pending = next((p for p in payments if not p.is_paid), None)
+        due = max(fee["amount"] - paid, Decimal("0.00"))
+
+        if due <= 0 and fee["amount"] == 0:
+            state = "free"
+        elif due <= 0:
+            state = "paid"
+        elif pending:
+            state = "pending"
+        else:
+            state = "owes"
+
+        user = a.vehicle.user
+
+        if user:
+            driver = user.get_full_name() or user.username
+        else:
+            driver = a.vehicle.owner_name or "Unknown Driver"
+
+        total_due += due
+
+        sessions.append({
+            "allocation_pk": a.pk,
+            "plate": a.vehicle.plate_number,
+            "vehicle_type": a.vehicle.get_vehicle_type_display(),
+            "driver": driver,
+            "slot": a.slot.slot_number,
+            "zone": a.slot.zone.name,
+            "entry_time": a.entry_time,
+            "duration": _format_duration(now - a.entry_time),
+            "fee": fee["amount"],
+            "paid": paid,
+            "due": due,
+            "state": state,
+        })
+
+    return sessions, total_due
+
+@login_required
+@require_POST
+def reservation_checkin(request, pk):
+
+    is_admin = is_approved_admin(request.user)
+
+    if get_role(request.user) == Profile.Role.ADMIN and not is_admin:
+        messages.error(request, "Your administrator account is not approved.")
+        return redirect("login")
+
+    with transaction.atomic():
+
+        reservation = get_object_or_404(
+            Reservation.objects.select_for_update().select_related("vehicle", "slot"),
+            pk=pk
+        )
+
+        if not (is_admin or reservation.created_by_id == request.user.id):
+            messages.error(request, "You are not allowed to check in this reservation.")
+            return redirect("reservation")
+
+        if reservation.status != Reservation.Status.CONFIRMED:
+            messages.error(request, "Only approved reservations can be checked in.")
+            return redirect("reservation")
+
+        now = timezone.now()
+
+        if now < reservation.start_time:
+            messages.error(request, "It is not yet time for this reservation.")
+            return redirect("reservation")
+
+        if now >= reservation.end_time:
+            messages.error(request, "This reservation has already ended.")
+            return redirect("reservation")
+
+        # Same rule as allocate_slot: only one vehicle parked at a time.
+        if Allocation.objects.filter(exit_time__isnull=True).exists():
+            messages.error(
+                request,
+                "Parking is currently occupied. Please wait until "
+                "the current vehicle exits."
+            )
+            return redirect("reservation")
+
+        slot = ParkingSlot.objects.select_for_update().get(pk=reservation.slot_id)
+
+        if slot.status != ParkingSlot.Status.RESERVED:
+            messages.error(request, f"Slot {slot.slot_number} is not available for check-in.")
+            return redirect("reservation")
+
+        Allocation.objects.create(
+            vehicle=reservation.vehicle,
+            slot=slot,
+            allocated_by=request.user,
+            entry_time=now,
+        )
+
+        slot.status = ParkingSlot.Status.OCCUPIED
+        slot.save(update_fields=["status"])
+
+        reservation.status = Reservation.Status.COMPLETED
+        reservation.save(update_fields=["status"])
+
+    messages.success(
+        request,
+        f"Checked in. {reservation.vehicle.plate_number} is now parked "
+        f"in slot {slot.slot_number}."
+    )
+
+    return redirect("driver_home")
+
+
+# ==========================================================
+# SETTINGS PAGE  (admin settings / driver settings in one template)
+#
+#   Administrators -> system-wide settings (SystemSettings, one row)
+#   Drivers        -> personal preferences (DriverPreference, one row each)
+#
+# Every form on settings.html posts a hidden "section" value; each
+# section has its own handler below and is validated on the server.
+# ==========================================================
+
+COMMON_TIMEZONES = [
+    "Asia/Manila", "Asia/Singapore", "Asia/Tokyo", "Asia/Hong_Kong",
+    "Asia/Bangkok", "Asia/Dubai", "Europe/London", "America/New_York",
+    "America/Los_Angeles", "UTC",
+]
+
+AUTO_RELEASE_OPTIONS = [
+    (0, "Never"), (12, "12 hours"), (24, "24 hours"), (48, "48 hours"),
+]
+
+ALLOC_MODES = {"nearest_entrance", "nearest_exit", "balanced", "first_free"}
+NO_SHOW_ACTIONS = {"warn", "fee", "block"}
+PAYMENT_CHOICES = {"gcash", "cash"}
+PRIORITY_KEYS = {"reservation", "pwd", "subscriber", "walkin"}
+
+# section name -> panel id in settings.html (reopens the same tab after saving)
+ADMIN_PANELS = {
+    "general": "a-general",
+    "allocation": "a-allocation",
+    "pricing": "a-pricing",
+    "reservations": "a-reservations",
+    "alerts": "a-alerts",
+    "security": "a-security",
+    "reset": "a-security",
+}
+
+DRIVER_PANELS = {
+    "profile": "d-profile",
+    "parking": "d-parking",
+    "notifications": "d-notifications",
+    "password": "d-security",
+    "privacy": "d-security",
+    "delete_account": "d-security",
+}
+
+
+# ---------- small validators ----------
+
+def _bool(post, name):
+    """Unticked HTML checkboxes are not posted at all."""
+    return name in post
+
+
+def _int(post, name, lo, hi, label=None):
+    label = label or name.replace("_", " ")
+    try:
+        val = int(str(post.get(name, "")).strip())
+    except ValueError:
+        raise ValidationError(f"{label.capitalize()} must be a whole number.")
+    if not lo <= val <= hi:
+        raise ValidationError(
+            f"{label.capitalize()} must be between {lo} and {hi}."
+        )
+    return val
+
+
+def _dec(post, name, lo, hi, label=None):
+    label = label or name.replace("_", " ")
+    try:
+        val = Decimal(str(post.get(name, "")).strip())
+    except InvalidOperation:
+        raise ValidationError(f"{label.capitalize()} must be a number.")
+    if not Decimal(lo) <= val <= Decimal(hi):
+        raise ValidationError(
+            f"{label.capitalize()} must be between {lo} and {hi}."
+        )
+    return val
+
+
+def _str(post, name, maxlen, required=False, label=None):
+    label = label or name.replace("_", " ")
+    val = post.get(name, "").strip()
+    if required and not val:
+        raise ValidationError(f"{label.capitalize()} is required.")
+    if len(val) > maxlen:
+        raise ValidationError(
+            f"{label.capitalize()} is too long (max {maxlen} characters)."
+        )
+    return val
+
+
+def _choice(post, name, allowed, label=None):
+    label = label or name.replace("_", " ")
+    val = post.get(name, "")
+    if val not in allowed:
+        raise ValidationError(f"Invalid value for {label}.")
+    return val
+
+
+def _int_choice(post, name, allowed, label=None):
+    label = label or name.replace("_", " ")
+    try:
+        val = int(post.get(name, ""))
+    except ValueError:
+        raise ValidationError(f"Invalid value for {label}.")
+    if val not in allowed:
+        raise ValidationError(f"Invalid value for {label}.")
+    return val
+
+
+def _time_value(post, name, label=None):
+    label = label or name.replace("_", " ")
+    try:
+        return datetime.strptime(post.get(name, ""), "%H:%M").time()
+    except ValueError:
+        raise ValidationError(f"Enter a valid {label}.")
+
+
+def _email_value(value, label="email"):
+    if value:
+        try:
+            validate_email(value)
+        except ValidationError:
+            raise ValidationError(f"Enter a valid {label}.")
+    return value
+
+
+# ---------- ADMIN section handlers ----------
+
+def _save_general(request, cfg):
+    p = request.POST
+    cfg.facility_name = _str(p, "facility_name", 120, required=True, label="facility name")
+    cfg.facility_code = _str(p, "facility_code", 20, label="facility code")
+    cfg.facility_address = _str(p, "facility_address", 255, label="address")
+    cfg.contact_email = _email_value(
+        _str(p, "contact_email", 254, label="contact email"), "contact email"
+    )
+
+    tz = p.get("timezone", "")
+    try:
+        ZoneInfo(tz)
+    except (ZoneInfoNotFoundError, ValueError):
+        raise ValidationError("Choose a valid timezone.")
+    cfg.timezone = tz
+
+    cfg.open_24_7 = _bool(p, "open_24_7")
+    if not cfg.open_24_7:       # time inputs are disabled (not posted) when open 24/7
+        opening = _time_value(p, "open_time", "opening time")
+        closing = _time_value(p, "close_time", "closing time")
+        if opening >= closing:
+            raise ValidationError("Closing time must be after opening time.")
+        cfg.open_time, cfg.close_time = opening, closing
+    cfg.save()
+
+
+def _save_allocation(request, cfg):
+    p = request.POST
+    cfg.alloc_mode = _choice(p, "alloc_mode", ALLOC_MODES, "allocation mode")
+    cfg.match_vehicle_type = _bool(p, "match_vehicle_type")
+    cfg.reserve_pwd = _bool(p, "reserve_pwd")
+    cfg.driver_can_choose = _bool(p, "driver_can_choose")
+    cfg.emergency_buffer = _int(p, "emergency_buffer", 0, 20, "emergency buffer")
+    cfg.auto_release_hours = _int_choice(
+        p, "auto_release_hours", {h for h, _ in AUTO_RELEASE_OPTIONS}, "auto-release"
+    )
+
+    order = [k for k in p.get("priority_order", "").split(",") if k]
+    if len(order) != len(PRIORITY_KEYS) or set(order) != PRIORITY_KEYS:
+        raise ValidationError("Invalid priority order.")
+    cfg.priority_order = ",".join(order)
+    cfg.save()
+
+
+def _save_pricing(request, cfg):
+    p = request.POST
+    cfg.free_minutes = _int(p, "free_minutes", 0, 1440, "free minutes")
+    cfg.hourly_rate = _dec(p, "hourly_rate", 0, 100000, "hourly rate")
+    cfg.pay_gcash = _bool(p, "pay_gcash")
+    cfg.pay_cash = _bool(p, "pay_cash")
+    if not (cfg.pay_gcash or cfg.pay_cash):
+        raise ValidationError("Enable at least one payment method.")
+    cfg.save()
+
+
+def _save_reservations(request, cfg):
+    p = request.POST
+    cfg.res_enabled = _bool(p, "res_enabled")
+    cfg.res_advance_days = _int(p, "res_advance_days", 1, 365, "advance booking days")
+    cfg.res_max_hours = _int(p, "res_max_hours", 1, 72, "max booking length")
+    cfg.res_hold_minutes = _int(p, "res_hold_minutes", 0, 240, "hold time")
+    cfg.res_cancel_minutes = _int(p, "res_cancel_minutes", 0, 1440, "cancellation window")
+    cfg.res_per_driver = _int(p, "res_per_driver", 1, 20, "reservations per driver")
+    cfg.no_show_action = _choice(p, "no_show_action", NO_SHOW_ACTIONS, "no-show action")
+    cfg.save()
+
+
+def _save_alerts(request, cfg):
+    p = request.POST
+    cfg.al_occupancy = _bool(p, "al_occupancy")
+    cfg.al_occupancy_pct = _int(p, "al_occupancy_pct", 50, 100, "occupancy alert level")
+    cfg.al_overstay = _bool(p, "al_overstay")
+    cfg.al_new_driver = _bool(p, "al_new_driver")
+    cfg.al_payment = _bool(p, "al_payment")
+
+    recipients = [
+        e.strip() for e in p.get("al_recipients", "").split(",") if e.strip()
+    ]
+    for e in recipients:
+        _email_value(e, f"recipient email ({e})")
+    cfg.al_recipients = ", ".join(recipients)[:500]
+
+    cfg.dr_assigned = _bool(p, "dr_assigned")
+    cfg.dr_reminder = _bool(p, "dr_reminder")
+    cfg.dr_reminder_min = _int_choice(p, "dr_reminder_min", {15, 30, 60}, "reminder lead time")
+    cfg.save()
+
+
+def _save_security(request, cfg):
+    p = request.POST
+    cfg.require_2fa = _bool(p, "require_2fa")
+    cfg.session_timeout = _int(p, "session_timeout", 5, 1440, "session timeout")
+    cfg.min_password = _int(p, "min_password", 6, 32, "minimum password length")
+    cfg.lock_attempts = _int(p, "lock_attempts", 3, 20, "failed login limit")
+    cfg.self_register = _bool(p, "self_register")
+    cfg.retain_history = _int_choice(p, "retain_history", {90, 365, 1095}, "history retention")
+    cfg.mask_plates = _bool(p, "mask_plates")
+    cfg.audit_log = _bool(p, "audit_log")
+    cfg.save()
+
+
+def _reset_settings(request, cfg):
+    cfg.delete()
+    SystemSettings.load()       # recreates the row (starting from settings.py values)
+
+
+ADMIN_HANDLERS = {
+    "general": _save_general,
+    "allocation": _save_allocation,
+    "pricing": _save_pricing,
+    "reservations": _save_reservations,
+    "alerts": _save_alerts,
+    "security": _save_security,
+    "reset": _reset_settings,
+}
+
+
+# ---------- DRIVER section handlers ----------
+
+def _save_profile(request, prefs):
+    p, user = request.POST, request.user
+
+    user.first_name = _str(p, "first_name", 150, label="first name")
+    user.last_name = _str(p, "last_name", 150, label="last name")
+    email = _email_value(_str(p, "email", 254), "email")
+
+    if not email:
+        raise ValidationError("Email address is required.")
+    if User.objects.filter(email__iexact=email).exclude(pk=user.pk).exists():
+        raise ValidationError("That email address is already being used.")
+
+    user.email = email
+    user.save(update_fields=["first_name", "last_name", "email"])
+
+    phone = _str(p, "phone", 30, label="mobile number")
+    if phone and not all(ch.isdigit() or ch in "+-() " for ch in phone):
+        raise ValidationError("Mobile number contains invalid characters.")
+
+    profile = getattr(user, "profile", None)     # phone lives on Profile
+    if profile is not None:
+        profile.phone = phone
+        profile.save(update_fields=["phone"])
+
+
+def _save_parking(request, prefs):
+    p = request.POST
+
+    vehicle_id = p.get("default_vehicle", "")
+    if vehicle_id:
+        vehicle = Vehicle.objects.filter(
+            pk=vehicle_id, user=request.user, is_archived=False
+        ).first()                                # must be the driver's own vehicle
+        if vehicle is None:
+            raise ValidationError("Choose one of your own vehicles.")
+        prefs.default_vehicle = vehicle
+    else:
+        prefs.default_vehicle = None
+
+    zone_id = p.get("preferred_zone", "")
+    if zone_id:
+        zone = Zone.objects.filter(pk=zone_id, is_active=True).first()
+        if zone is None:
+            raise ValidationError("That zone is not available.")
+        prefs.preferred_zone = zone
+    else:
+        prefs.preferred_zone = None
+
+    prefs.prefer_covered = _bool(p, "prefer_covered")
+    prefs.prefer_exit = _bool(p, "prefer_exit")
+    prefs.needs_pwd = _bool(p, "needs_pwd")
+    prefs.needs_ev = _bool(p, "needs_ev")
+    prefs.auto_release = _int_choice(p, "auto_release", {0, 4, 8, 12}, "auto-release")
+    prefs.default_payment = _choice(p, "default_payment", PAYMENT_CHOICES, "payment method")
+    prefs.save()
+
+
+def _save_notifications(request, prefs):
+    p = request.POST
+    prefs.ch_app = _bool(p, "ch_app")
+    prefs.ch_email = _bool(p, "ch_email")
+    prefs.ch_sms = _bool(p, "ch_sms")
+    prefs.n_assigned = _bool(p, "n_assigned")
+    prefs.n_reminder = _bool(p, "n_reminder")
+    prefs.n_expiry = _int_choice(p, "n_expiry", {0, 10, 15, 30}, "expiry warning")
+    prefs.n_receipt = _bool(p, "n_receipt")
+    prefs.n_promo = _bool(p, "n_promo")
+    prefs.save()
+
+
+def _save_privacy(request, prefs):
+    prefs.mask_plate = _bool(request.POST, "mask_plate")
+    prefs.signin_alerts = _bool(request.POST, "signin_alerts")
+    prefs.save(update_fields=["mask_plate", "signin_alerts"])
+
+
+DRIVER_HANDLERS = {
+    "profile": _save_profile,
+    "parking": _save_parking,
+    "notifications": _save_notifications,
+    "privacy": _save_privacy,
+}
+
+
+# ---------- the view ----------
+
+def _settings_back(panel):
+    return redirect(f"{reverse('settings')}#{panel}")
+
+
+@login_required
+def settings_page(request):
+
+    role = get_role(request.user)
+    is_admin = is_approved_admin(request.user)
+
+    # Same guards as the rest of the pages
+    if role == Profile.Role.ADMIN and not is_admin:
+        messages.error(request, "Your administrator account is not approved.")
+        return redirect("login")
+
+    if role not in (Profile.Role.ADMIN, Profile.Role.DRIVER):
+        return redirect(home_for(request.user))
+
+    # ---------------- POST: save one section ----------------
+    if request.method == "POST":
+
+        section = request.POST.get("section", "")
+        panels = ADMIN_PANELS if is_admin else DRIVER_PANELS
+
+        if section not in panels:
+            # Unknown section, or a driver/admin posting the other role's section.
+            return HttpResponseForbidden(
+                "You are not allowed to change these settings."
+            )
+
+        panel = panels[section]
+
+        try:
+            if is_admin:
+                cfg = SystemSettings.load()
+                ADMIN_HANDLERS[section](request, cfg)
+                messages.success(
+                    request,
+                    "Settings reset to defaults."
+                    if section == "reset"
+                    else "Settings saved.",
+                )
+
+            elif section == "password":
+                form = PasswordChangeForm(request.user, request.POST)
+                if form.is_valid():
+                    user = form.save()
+                    update_session_auth_hash(request, user)    # stay logged in
+                    messages.success(request, "Your password was updated.")
+                else:
+                    for errs in form.errors.values():
+                        for err in errs:
+                            messages.error(request, err)
+
+            elif section == "delete_account":
+                if Allocation.objects.filter(
+                    vehicle__user=request.user, exit_time__isnull=True
+                ).exists():
+                    messages.error(
+                        request,
+                        "You are currently parked. Release your slot "
+                        "before deleting your account.",
+                    )
+                else:
+                    user = request.user
+                    logout(request)
+                    delete_account_data(user)
+                    messages.success(request, "Your account has been deleted.")
+                    return redirect("login")
+
+            else:
+                prefs, _ = DriverPreference.objects.get_or_create(user=request.user)
+                DRIVER_HANDLERS[section](request, prefs)
+                messages.success(request, "Settings saved.")
+
+        except ValidationError as e:
+            for msg in e.messages:
+                messages.error(request, msg)
+
+        return _settings_back(panel)
+
+    # ---------------- GET: show the page ----------------
+    context = {"is_admin": is_admin}
+
+    if is_admin:
+        cfg = SystemSettings.load()
+
+        tz_list = list(COMMON_TIMEZONES)
+        if cfg.timezone not in tz_list:
+            tz_list.insert(0, cfg.timezone)
+
+        context.update(
+            cfg=cfg,
+            timezones=tz_list,
+            auto_release_options=AUTO_RELEASE_OPTIONS,
+        )
+
+    else:
+        prefs, _ = DriverPreference.objects.get_or_create(user=request.user)
+
+        # settings.html reads {{ profile.phone }}; phone lives on Profile.
+        prefs.phone = getattr(getattr(request.user, "profile", None), "phone", "") or ""
+
+        context.update(
+            profile=prefs,
+            vehicles=request.user.vehicles.filter(is_archived=False).order_by("plate_number"),
+            zones=Zone.objects.filter(is_active=True).order_by("name"),
+        )
+
+    return render(request, "settings.html", context)

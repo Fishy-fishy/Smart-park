@@ -1,3 +1,4 @@
+
 {% load static %}
 <!DOCTYPE html>
 <html lang="en">
@@ -9,7 +10,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    <<link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+
+    <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
     <link rel="stylesheet" href="{% static 'css/reservation.css' %}">
     <link rel="stylesheet" href="{% static 'css/notifications.css' %}">
 </head>
@@ -18,7 +20,7 @@
 
 <div class="app">
 
-    <!-- ============ SIDEBAR ============ -->
+    <!-- SIDEBAR -->
     <aside class="sidebar" id="sidebar">
 
         <div class="brand">
@@ -26,7 +28,7 @@
                 <i class="bi bi-p-square-fill"></i>
             </div>
             <div>
-                <h1>SmartPark</h1>
+               <h1>{{ cfg.facility_name|default:"SmartPark" }}</h1>
                 <span>Slot Allocation System</span>
             </div>
         </div>
@@ -36,9 +38,15 @@
             <p class="nav-label">Main</p>
 
             {% if is_admin %}
-                <a href="{% url 'admin_request' %}" class="nav-link"><i class="bi bi-person-gear"></i> Admins &amp; Drivers</a>
+                <a href="{% url 'admin_request' %}" class="nav-link">
+                    <i class="bi bi-person-gear"></i>
+                    Admins &amp; Drivers
+                </a>
             {% else %}
-                <a href="{% url 'driver_home' %}" class="nav-link"><i class="bi bi-grid-1x2-fill"></i> Dashboard</a>
+                <a href="{% url 'driver_home' %}" class="nav-link">
+                    <i class="bi bi-grid-1x2-fill"></i>
+                    Dashboard
+                </a>
             {% endif %}
 
             <a href="{% url 'parking_slot' %}" class="nav-link">
@@ -59,27 +67,42 @@
             <p class="nav-label">Management</p>
 
             {% if is_admin %}
-                <a href="{% url 'allocation_history' %}" class="nav-link"><i class="bi bi-clock-history"></i> Allocation History</a>
+                <a href="{% url 'allocation_history' %}" class="nav-link">
+                    <i class="bi bi-clock-history"></i>
+                    Allocation History
+                </a>
             {% else %}
-                <a href="{% url 'my_history' %}" class="nav-link"><i class="bi bi-clock-history"></i> My History</a>
+                <a href="{% url 'my_history' %}" class="nav-link">
+                    <i class="bi bi-clock-history"></i>
+                    My History
+                </a>
             {% endif %}
-            <a href="#" class="nav-link"><i class="bi bi-credit-card"></i> Payments</a>
-            <a href="#" class="nav-link"><i class="bi bi-bar-chart-line"></i> Reports</a>
-            <a href="#" class="nav-link"><i class="bi bi-gear"></i> Settings</a>
+
+            <a href="{% url 'payments' %}" class="nav-link">
+                <i class="bi bi-credit-card"></i>
+                Payments
+            </a>
+
+
+                     <a href="{% url 'settings' %}"
+   class="nav-link {% if url_name == 'settings' %}active{% endif %}"
+   {% if url_name == 'settings' %}aria-current="page"{% endif %}>
+    <i class="bi bi-gear"></i>
+    Settings
+</a>
 
         </nav>
 
     </aside>
 
 
-    <!-- ============ MAIN CONTENT ============ -->
+    <!-- MAIN CONTENT -->
     <main class="main">
 
         <!-- TOPBAR -->
         <header class="topbar">
 
             <div class="topbar-title">
-
                 <h2>Reservations</h2>
 
                 <p>
@@ -89,33 +112,52 @@
                         Manage your parking reservations.
                     {% endif %}
                 </p>
-
             </div>
 
             <div class="topbar-actions">
 
-                <div class="notif-wrap" id="notif-wrap"
-     data-url="{% url 'notifications_data' %}"
-     data-user="{{ request.user.pk }}">
-    <button type="button" class="notif-btn" id="notif-btn" aria-label="Notifications" aria-expanded="false">
-        <i class="bi bi-bell"></i>
-        <span class="notif-dot" id="notif-dot" hidden></span>
-    </button>
+                <!-- NOTIFICATIONS -->
+                <div class="notif-wrap"
+                     id="notif-wrap"
+                     data-url="{% url 'notifications_data' %}"
+                     data-user="{{ request.user.pk }}">
 
-    <div class="notif-panel" id="notif-panel" role="region" aria-label="Notifications">
-        <div class="notif-head">
-            <div>
-                <strong>Notifications</strong>
-                <span class="notif-count" id="notif-count" hidden></span>
-            </div>
-            <button type="button" id="notif-read-all">Mark all as read</button>
-        </div>
-        <ul class="notif-list" id="notif-list">
-            <li class="notif-empty">Loading...</li>
-        </ul>
-    </div>
-</div>
+                    <button type="button"
+                            class="notif-btn"
+                            id="notif-btn"
+                            aria-label="Notifications"
+                            aria-expanded="false">
 
+                        <i class="bi bi-bell"></i>
+                        <span class="notif-dot" id="notif-dot" hidden></span>
+
+                    </button>
+
+                    <div class="notif-panel"
+                         id="notif-panel"
+                         role="region"
+                         aria-label="Notifications">
+
+                        <div class="notif-head">
+                            <div>
+                                <strong>Notifications</strong>
+                                <span class="notif-count" id="notif-count" hidden></span>
+                            </div>
+
+                            <button type="button" id="notif-read-all">
+                                Mark all as read
+                            </button>
+                        </div>
+
+                        <ul class="notif-list" id="notif-list">
+                            <li class="notif-empty">Loading...</li>
+                        </ul>
+
+                    </div>
+                </div>
+
+
+                <!-- USER -->
                 <div class="user">
 
                     <div class="avatar">
@@ -140,20 +182,19 @@
 
                 </div>
 
-                <!-- LOGOUT FORM -->
-                <form
-                    method="post"
-                    action="{% url 'logout' %}"
-                    class="logout-form"
-                    id="logout-form">
+
+                <!-- LOGOUT -->
+                <form method="post"
+                      action="{% url 'logout' %}"
+                      class="logout-form"
+                      id="logout-form">
 
                     {% csrf_token %}
 
-                    <button
-                        type="button"
-                        class="logout-btn"
-                        id="logout-open"
-                        title="Log out">
+                    <button type="button"
+                            class="logout-btn"
+                            id="logout-open"
+                            title="Log out">
 
                         <i class="bi bi-box-arrow-right"></i>
                         <span>Log out</span>
@@ -225,74 +266,58 @@
         </section>
 
 
-        <!-- ============ STATISTICS ============ -->
+        <!-- STATISTICS -->
         <section class="stats">
 
             <article class="stat">
-
                 <div class="stat-icon blue">
                     <i class="bi bi-calendar-check"></i>
                 </div>
-
                 <div>
                     <span>Total Reservations</span>
                     <h3>{{ total_reservations|default:0 }}</h3>
                 </div>
-
             </article>
 
-
             <article class="stat">
-
                 <div class="stat-icon amber">
                     <i class="bi bi-hourglass-split"></i>
                 </div>
-
                 <div>
                     <span>Pending</span>
                     <h3>{{ pending_reservations|default:0 }}</h3>
                 </div>
-
             </article>
 
-
             <article class="stat">
-
                 <div class="stat-icon green">
                     <i class="bi bi-check-circle"></i>
                 </div>
-
                 <div>
                     <span>Confirmed</span>
                     <h3>{{ approved_reservations|default:0 }}</h3>
                 </div>
-
             </article>
 
-
             <article class="stat">
-
                 <div class="stat-icon red">
                     <i class="bi bi-x-circle"></i>
                 </div>
-
                 <div>
                     <span>Cancelled</span>
                     <h3>{{ rejected_reservations|default:0 }}</h3>
                 </div>
-
             </article>
 
         </section>
 
 
-        <!-- ============ DRIVER RESERVATION FORM ============ -->
+        <!-- DRIVER RESERVATION FORM -->
         {% if not is_admin %}
 
         <section class="card">
 
             <div class="card-head">
-
                 <div>
                     <h3>
                         <i class="bi bi-plus-circle"></i>
@@ -300,18 +325,16 @@
                     </h3>
 
                     <span class="muted">
-                        Enter your parking reservation details.
+                        Select your vehicle to find compatible parking slots.
                     </span>
                 </div>
-
             </div>
 
 
-            <form
-                method="post"
-                action="{% url 'reservation_create' %}"
-                class="reservation-form"
-                id="reservation-form">
+            <form method="post"
+                  action="{% url 'reservation_create' %}"
+                  class="reservation-form"
+                  id="reservation-form">
 
                 {% csrf_token %}
 
@@ -319,9 +342,7 @@
                 <!-- VEHICLE -->
                 <div class="field">
 
-                    <label for="vehicle">
-                        Select Vehicle
-                    </label>
+                    <label for="vehicle">Select Vehicle</label>
 
                     <div class="input">
 
@@ -329,13 +350,12 @@
 
                         <select name="vehicle" id="vehicle" required>
 
-                            <option value="">
-                                Choose your vehicle
-                            </option>
+                            <option value="">Choose your vehicle</option>
 
                             {% for vehicle in vehicles %}
 
-                            <option value="{{ vehicle.id }}">
+                            <option value="{{ vehicle.id }}"
+                                    data-vehicle-type="{{ vehicle.vehicle_type|lower }}">
 
                                 {{ vehicle.plate_number }} -
                                 {{ vehicle.get_vehicle_type_display|default:vehicle.vehicle_type }}
@@ -360,25 +380,24 @@
                 <!-- PARKING SLOT -->
                 <div class="field">
 
-                    <label for="slot">
-                        Select Parking Slot
-                    </label>
+                    <label for="slot">Select Compatible Parking Slot</label>
 
                     <div class="input">
 
                         <i class="bi bi-p-square"></i>
 
-                        <select name="slot" id="slot" required>
+                        <select name="slot" id="slot" required disabled>
 
                             <option value="">
-                                Choose an available slot
+                                Select your vehicle first
                             </option>
 
                             {% for slot in slots %}
 
                                 {% if slot.status == 'available' %}
 
-                                <option value="{{ slot.id }}">
+                                <option value="{{ slot.id }}"
+                                        data-slot-type="{{ slot.slot_type|lower }}">
 
                                     {{ slot.zone.name }} -
                                     {{ slot.slot_number }}
@@ -388,59 +407,51 @@
 
                                 {% endif %}
 
-                            {% empty %}
-
-                            <option value="" disabled>
-                                No available parking slots
-                            </option>
-
                             {% endfor %}
 
                         </select>
 
                     </div>
 
+                    <small id="slot-help" class="muted">
+                        Available parking slots will appear after selecting your vehicle.
+                    </small>
+
                 </div>
 
 
-                <!-- START DATETIME -->
+                <!-- START TIME -->
                 <div class="field">
 
-                    <label for="start-time">
-                        Reservation Start
-                    </label>
+                    <label for="start-time">Reservation Start</label>
 
                     <div class="input">
 
                         <i class="bi bi-calendar-event"></i>
 
-                        <input
-                            type="datetime-local"
-                            name="start_time"
-                            id="start-time"
-                            required>
+                        <input type="datetime-local"
+                               name="start_time"
+                               id="start-time"
+                               required>
 
                     </div>
 
                 </div>
 
 
-                <!-- END DATETIME -->
+                <!-- END TIME -->
                 <div class="field">
 
-                    <label for="end-time">
-                        Reservation End
-                    </label>
+                    <label for="end-time">Reservation End</label>
 
                     <div class="input">
 
                         <i class="bi bi-calendar-check"></i>
 
-                        <input
-                            type="datetime-local"
-                            name="end_time"
-                            id="end-time"
-                            required>
+                        <input type="datetime-local"
+                               name="end_time"
+                               id="end-time"
+                               required>
 
                     </div>
 
@@ -450,10 +461,9 @@
                 <!-- SUBMIT -->
                 <div class="field full">
 
-                    <button
-                        type="submit"
-                        class="btn-primary"
-                        id="reservation-submit">
+                    <button type="submit"
+                            class="btn-primary"
+                            id="reservation-submit">
 
                         <i class="bi bi-calendar-plus"></i>
                         Submit Reservation
@@ -469,13 +479,12 @@
         {% endif %}
 
 
-        <!-- ============ RESERVATION TABLE ============ -->
+        <!-- RESERVATION TABLE -->
         <section class="card">
 
             <div class="card-head">
 
                 <div>
-
                     <h3>
                         {% if is_admin %}
                             All Reservations
@@ -485,15 +494,12 @@
                     </h3>
 
                     <span class="muted">
-
                         {% if is_admin %}
                             View and manage reservation requests from all drivers.
                         {% else %}
                             Monitor your reservation requests and their status.
                         {% endif %}
-
                     </span>
-
                 </div>
 
 
@@ -501,24 +507,19 @@
                 <div class="table-controls">
 
                     <div class="input">
-
                         <i class="bi bi-search"></i>
 
-                        <input
-                            type="text"
-                            id="reservation-search"
-                            placeholder="Search plate or driver...">
-
+                        <input type="text"
+                               id="reservation-search"
+                               placeholder="Search plate or driver...">
                     </div>
 
                     <select id="status-filter">
-
                         <option value="">All Status</option>
                         <option value="pending">Pending</option>
                         <option value="confirmed">Confirmed</option>
                         <option value="cancelled">Cancelled</option>
                         <option value="completed">Completed</option>
-
                     </select>
 
                 </div>
@@ -531,7 +532,6 @@
                 <table class="table" id="reservation-table">
 
                     <thead>
-
                         <tr>
 
                             {% if is_admin %}
@@ -547,7 +547,6 @@
                             <th>Actions</th>
 
                         </tr>
-
                     </thead>
 
 
@@ -560,27 +559,21 @@
                             {% if is_admin %}
 
                             <td>
-
                                 <div class="cell-vehicle">
 
                                     <strong>
                                         {{ reservation.created_by.get_full_name|default:reservation.created_by.username }}
                                     </strong>
 
-                                    <small>
-                                        Driver
-                                    </small>
+                                    <small>Driver</small>
 
                                 </div>
-
                             </td>
 
                             {% endif %}
 
 
-                            <!-- VEHICLE -->
                             <td>
-
                                 <div class="cell-vehicle">
 
                                     <span class="plate">
@@ -592,37 +585,29 @@
                                     </small>
 
                                 </div>
-
                             </td>
 
 
-                            <!-- SLOT -->
                             <td>
-                                <strong>
-                                    {{ reservation.slot.slot_number }}
-                                </strong>
+                                <strong>{{ reservation.slot.slot_number }}</strong>
                             </td>
 
 
-                            <!-- ZONE -->
                             <td>
                                 {{ reservation.slot.zone.name }}
                             </td>
 
 
-                            <!-- START TIME -->
                             <td>
                                 {{ reservation.start_time|date:"M d, Y h:i A" }}
                             </td>
 
 
-                            <!-- END TIME -->
                             <td>
                                 {{ reservation.end_time|date:"M d, Y h:i A" }}
                             </td>
 
 
-                            <!-- STATUS -->
                             <td>
 
                                 {% if reservation.status == 'pending' %}
@@ -673,16 +658,13 @@
 
                                         {% if reservation.status == 'pending' %}
 
-                                            <!-- APPROVE -->
-                                            <form
-                                                method="post"
-                                                action="{% url 'reservation_approve' reservation.pk %}">
+                                            <form method="post"
+                                                  action="{% url 'reservation_approve' reservation.pk %}">
 
                                                 {% csrf_token %}
 
-                                                <button
-                                                    type="submit"
-                                                    class="action-btn approve-btn">
+                                                <button type="submit"
+                                                        class="action-btn approve-btn">
 
                                                     <i class="bi bi-check-lg"></i>
                                                     Approve
@@ -692,17 +674,14 @@
                                             </form>
 
 
-                                            <!-- REJECT -->
-                                            <form
-                                                method="post"
-                                                action="{% url 'reservation_reject' reservation.pk %}"
-                                                onsubmit="return confirm('Reject this reservation?');">
+                                            <form method="post"
+                                                  action="{% url 'reservation_reject' reservation.pk %}"
+                                                  onsubmit="return confirm('Reject this reservation?');">
 
                                                 {% csrf_token %}
 
-                                                <button
-                                                    type="submit"
-                                                    class="action-btn reject-btn">
+                                                <button type="submit"
+                                                        class="action-btn reject-btn">
 
                                                     <i class="bi bi-x-lg"></i>
                                                     Reject
@@ -714,16 +693,13 @@
 
                                         {% elif reservation.status == 'confirmed' %}
 
-                                            <!-- COMPLETE -->
-                                            <form
-                                                method="post"
-                                                action="{% url 'reservation_complete' reservation.pk %}">
+                                            <form method="post"
+                                                  action="{% url 'reservation_complete' reservation.pk %}">
 
                                                 {% csrf_token %}
 
-                                                <button
-                                                    type="submit"
-                                                    class="action-btn approve-btn">
+                                                <button type="submit"
+                                                        class="action-btn approve-btn">
 
                                                     <i class="bi bi-check-circle"></i>
                                                     Complete
@@ -733,17 +709,14 @@
                                             </form>
 
 
-                                            <!-- CANCEL -->
-                                            <form
-                                                method="post"
-                                                action="{% url 'reservation_cancel' reservation.pk %}"
-                                                onsubmit="return confirm('Cancel this reservation?');">
+                                            <form method="post"
+                                                  action="{% url 'reservation_cancel' reservation.pk %}"
+                                                  onsubmit="return confirm('Cancel this reservation?');">
 
                                                 {% csrf_token %}
 
-                                                <button
-                                                    type="submit"
-                                                    class="action-btn cancel-btn">
+                                                <button type="submit"
+                                                        class="action-btn cancel-btn">
 
                                                     <i class="bi bi-x-circle"></i>
                                                     Cancel
@@ -754,9 +727,7 @@
 
                                         {% else %}
 
-                                            <span class="muted">
-                                                No actions
-                                            </span>
+                                            <span class="muted">No actions</span>
 
                                         {% endif %}
 
@@ -765,16 +736,25 @@
 
                                         {% if reservation.status == 'pending' or reservation.status == 'confirmed' %}
 
-                                            <form
-                                                method="post"
-                                                action="{% url 'reservation_cancel' reservation.pk %}"
-                                                onsubmit="return confirm('Cancel your reservation?');">
+    {% if reservation.status == 'confirmed' and reservation.start_time <= now and reservation.end_time > now %}
+    <form method="post"
+          action="{% url 'reservation_checkin' reservation.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="action-btn approve-btn">
+            <i class="bi bi-box-arrow-in-right"></i>
+            Check in
+        </button>
+    </form>
+    {% endif %}
+
+    <form method="post"
+          action="{% url 'reservation_cancel' reservation.pk %}"
+          onsubmit="return confirm('Cancel your reservation?');">
 
                                                 {% csrf_token %}
 
-                                                <button
-                                                    type="submit"
-                                                    class="action-btn cancel-btn">
+                                                <button type="submit"
+                                                        class="action-btn cancel-btn">
 
                                                     <i class="bi bi-x-circle"></i>
                                                     Cancel
@@ -785,9 +765,7 @@
 
                                         {% else %}
 
-                                            <span class="muted">
-                                                No actions
-                                            </span>
+                                            <span class="muted">No actions</span>
 
                                         {% endif %}
 
@@ -803,19 +781,14 @@
                         {% empty %}
 
                         <tr>
-
                             <td colspan="{% if is_admin %}8{% else %}7{% endif %}">
 
                                 <div class="empty">
-
                                     <i class="bi bi-calendar-x"></i>
-
                                     <p>No reservations found.</p>
-
                                 </div>
 
                             </td>
-
                         </tr>
 
                         {% endfor %}
@@ -831,10 +804,8 @@
 
         <!-- FOOTER -->
         <footer class="footer">
-
             &copy; {% now "Y" %} SmartPark
             &middot; Smart Parking Slot Allocation System
-
         </footer>
 
     </main>
@@ -842,14 +813,13 @@
 </div>
 
 
-<!-- ============ LOGOUT CONFIRMATION MODAL ============ -->
-<div
-    class="modal-overlay"
-    id="logout-modal"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="logout-title"
-    aria-describedby="logout-desc">
+<!-- LOGOUT MODAL -->
+<div class="modal-overlay"
+     id="logout-modal"
+     role="dialog"
+     aria-modal="true"
+     aria-labelledby="logout-title"
+     aria-describedby="logout-desc">
 
     <div class="modal-box">
 
@@ -857,9 +827,7 @@
             <i class="bi bi-box-arrow-right"></i>
         </div>
 
-        <h3 id="logout-title">
-            Log out?
-        </h3>
+        <h3 id="logout-title">Log out?</h3>
 
         <p id="logout-desc">
             Are you sure you want to log out of SmartPark?
@@ -867,22 +835,16 @@
 
         <div class="modal-actions">
 
-            <button
-                type="button"
-                class="btn-cancel"
-                id="logout-cancel">
-
+            <button type="button"
+                    class="btn-cancel"
+                    id="logout-cancel">
                 Cancel
-
             </button>
 
-            <button
-                type="button"
-                class="btn-confirm"
-                id="logout-confirm">
-
+            <button type="button"
+                    class="btn-confirm"
+                    id="logout-confirm">
                 Yes, log out
-
             </button>
 
         </div>
@@ -892,7 +854,7 @@
 </div>
 
 
-<!-- ============ JAVASCRIPT ============ -->
+<!-- JAVASCRIPT -->
 <script>
 
 /* =========================================================
@@ -907,6 +869,10 @@
     const confirmBtn = document.getElementById('logout-confirm');
     const form = document.getElementById('logout-form');
 
+    if (!modal || !openBtn || !cancelBtn || !confirmBtn || !form) {
+        return;
+    }
+
     function openModal() {
         modal.classList.add('show');
         cancelBtn.focus();
@@ -918,7 +884,6 @@
     }
 
     openBtn.addEventListener('click', openModal);
-
     cancelBtn.addEventListener('click', closeModal);
 
     confirmBtn.addEventListener('click', function () {
@@ -932,12 +897,113 @@
     });
 
     document.addEventListener('keydown', function (e) {
-
         if (e.key === 'Escape' && modal.classList.contains('show')) {
             closeModal();
         }
-
     });
+
+})();
+
+
+/* =========================================================
+   VEHICLE-BASED PARKING SLOT FILTER
+   ========================================================= */
+
+(function () {
+
+    const vehicleSelect = document.getElementById('vehicle');
+    const slotSelect = document.getElementById('slot');
+    const slotHelp = document.getElementById('slot-help');
+
+    if (!vehicleSelect || !slotSelect) {
+        return;
+    }
+
+    // Store available slots from Django.
+    const allSlots = Array.from(slotSelect.options)
+        .filter(option => option.value !== '')
+        .map(option => ({
+            value: option.value,
+            text: option.textContent.trim(),
+            type: option.dataset.slotType
+        }));
+
+    function filterSlots() {
+
+        const selectedOption =
+            vehicleSelect.options[vehicleSelect.selectedIndex];
+
+        const vehicleType =
+            selectedOption?.dataset.vehicleType || '';
+
+        // Clear previous options.
+        slotSelect.innerHTML = '';
+
+        if (!vehicleType) {
+
+            slotSelect.add(new Option(
+                'Select your vehicle first',
+                ''
+            ));
+
+            slotSelect.disabled = true;
+
+            if (slotHelp) {
+                slotHelp.textContent =
+                    'Available parking slots will appear after selecting your vehicle.';
+            }
+
+            return;
+        }
+
+        // Find compatible slots.
+        const compatibleSlots = allSlots.filter(slot =>
+            slot.type === vehicleType
+        );
+
+        // Add placeholder.
+        slotSelect.add(new Option(
+            compatibleSlots.length
+                ? 'Choose a compatible parking slot'
+                : 'No compatible parking slots available',
+            ''
+        ));
+
+        // Display only matching slots.
+        compatibleSlots.forEach(slot => {
+
+            slotSelect.add(new Option(
+                slot.text,
+                slot.value
+            ));
+
+        });
+
+        slotSelect.disabled = compatibleSlots.length === 0;
+
+        if (slotHelp) {
+
+            if (compatibleSlots.length > 0) {
+
+                slotHelp.textContent =
+                    compatibleSlots.length +
+                    ' compatible available parking slot(s) found.';
+
+            } else {
+
+                slotHelp.textContent =
+                    'No available parking slots match this vehicle type.';
+
+            }
+
+        }
+
+    }
+
+    vehicleSelect.addEventListener('change', filterSlots);
+
+    // Initial dropdown state.
+    filterSlots();
 
 })();
 
@@ -983,7 +1049,6 @@
     }
 
     searchInput.addEventListener('input', filterReservations);
-
     statusFilter.addEventListener('change', filterReservations);
 
 })();
@@ -1004,7 +1069,6 @@
     const startInput = document.getElementById('start-time');
     const endInput = document.getElementById('end-time');
 
-    // Set minimum date and time to the current local time.
     function setMinimumDateTime() {
 
         const now = new Date();
@@ -1053,7 +1117,8 @@
             return;
         }
 
-        const submitBtn = document.getElementById('reservation-submit');
+        const submitBtn =
+            document.getElementById('reservation-submit');
 
         if (submitBtn) {
             submitBtn.disabled = true;
@@ -1091,6 +1156,8 @@
 })();
 
 </script>
+
 <script src="{% static 'js/notifications.js' %}"></script>
+
 </body>
 </html>

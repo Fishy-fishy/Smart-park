@@ -1,9 +1,9 @@
-
+import datetime
 from decimal import Decimal
 
 from django.conf import settings
 from django.db import models, transaction
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, pre_delete
 from django.dispatch import receiver
 from django.utils import timezone
 
@@ -123,9 +123,10 @@ class Vehicle(models.Model):
 
     contact_number = models.CharField(max_length=30, blank=True)
 
+    # Deleting a driver account also deletes their vehicles.
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="vehicles"
@@ -147,7 +148,6 @@ class Vehicle(models.Model):
 
     def __str__(self):
         return self.plate_number
-
 
 
 # ---------------------------------------------------------------------------
@@ -200,9 +200,11 @@ class AllocationManager(models.Manager):
 class Allocation(models.Model):
     """A vehicle parked in a slot."""
 
+    # CASCADE: deleting a vehicle (or its driver) that has parking history
+    # does not raise ProtectedError.
     vehicle = models.ForeignKey(
         Vehicle,
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         related_name="allocations"
     )
 
@@ -317,18 +319,27 @@ class Reservation(models.Model):
 
 # ---------------------------------------------------------------------------
 # Payments
+#
+# - A parking session (Allocation) can have several payments, so a driver
+#   can pay again if they stay longer after paying.
+# - "Pending" simply means is_paid = False (e.g. cash waiting for an
+#   administrator to confirm it).
+# - Card numbers are never stored.
 # ---------------------------------------------------------------------------
 class Payment(models.Model):
 
     class Method(models.TextChoices):
-        CASH = "cash", "Cash"
-        CARD = "card", "Card"
-        EWALLET = "ewallet", "E-Wallet"
+        CASH = "cash", "Cash Counter"
+        GCASH = "gcash", "GCash"
+        CARD = "card", "Card"  # Keep for old payment records
+        WALLET = "ewallet", "E-Wallet"  # Keep for old records
+        MAYA = "maya", "Maya"  # Keep for old records
+        FREE = "free", "Free"  # (label changed: free minutes are now configurable)
 
-    allocation = models.OneToOneField(
+    allocation = models.ForeignKey(
         Allocation,
         on_delete=models.CASCADE,
-        related_name="payment"
+        related_name="payments"
     )
 
     amount = models.DecimalField(
@@ -343,15 +354,42 @@ class Payment(models.Model):
         default=Method.CASH
     )
 
+    # False = submitted but not confirmed yet
     is_paid = models.BooleanField(default=False)
 
     paid_at = models.DateTimeField(null=True, blank=True)
 
+    # GCash / Maya reference number
+    reference = models.CharField(max_length=60, blank=True)
+
+    paid_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payments_made"
+    )
+
+    confirmed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payments_confirmed"
+    )
+
+    created_at = models.DateTimeField(default=timezone.now)
+
     class Meta:
-        ordering = ["-paid_at"]
+        ordering = ["-created_at", "-pk"]
 
     def __str__(self):
         return f"{self.allocation} - {self.amount}"
+
+    @property
+    def status(self):
+        """Used by payment.html: 'paid' or 'pending'."""
+        return "paid" if self.is_paid else "pending"
 
 
 # ---------------------------------------------------------------------------
@@ -409,6 +447,140 @@ class Profile(models.Model):
 
 
 # ---------------------------------------------------------------------------
+# NEW: System settings (administrators)
+# One row only. Always use SystemSettings.load().
+# ---------------------------------------------------------------------------
+class SystemSettings(models.Model):
+
+    # General
+    facility_name = models.CharField(max_length=120, default="SmartPark")
+    facility_code = models.CharField(max_length=20, blank=True)
+    facility_address = models.CharField(max_length=255, blank=True)
+    contact_email = models.EmailField(blank=True)
+    timezone = models.CharField(max_length=64, default="Asia/Manila")
+    open_24_7 = models.BooleanField(default=True)
+    open_time = models.TimeField(default=datetime.time(6, 0))
+    close_time = models.TimeField(default=datetime.time(22, 0))
+
+    # Allocation
+    alloc_mode = models.CharField(max_length=20, default="nearest_entrance")
+    match_vehicle_type = models.BooleanField(default=True)
+    reserve_pwd = models.BooleanField(default=True)
+    driver_can_choose = models.BooleanField(default=True)
+    emergency_buffer = models.PositiveSmallIntegerField(default=2)
+    auto_release_hours = models.PositiveSmallIntegerField(default=24)
+    priority_order = models.CharField(
+        max_length=80,
+        default="reservation,pwd,subscriber,walkin"
+    )
+
+    # Pricing: first N minutes free, then every started hour is charged
+    free_minutes = models.PositiveSmallIntegerField(default=60)
+    hourly_rate = models.DecimalField(max_digits=8, decimal_places=2, default=20)
+    pay_gcash = models.BooleanField(default=True)
+    pay_cash = models.BooleanField(default=True)       # "Cash Counter"
+
+    # Reservations
+    res_enabled = models.BooleanField(default=True)
+    res_advance_days = models.PositiveSmallIntegerField(default=14)
+    res_max_hours = models.PositiveSmallIntegerField(default=12)
+    res_hold_minutes = models.PositiveSmallIntegerField(default=15)
+    res_cancel_minutes = models.PositiveSmallIntegerField(default=60)
+    res_per_driver = models.PositiveSmallIntegerField(default=3)
+    no_show_action = models.CharField(max_length=10, default="warn")
+
+    # Alerts
+    al_occupancy = models.BooleanField(default=True)
+    al_occupancy_pct = models.PositiveSmallIntegerField(default=90)
+    al_overstay = models.BooleanField(default=True)
+    al_new_driver = models.BooleanField(default=False)
+    al_payment = models.BooleanField(default=True)
+    al_recipients = models.CharField(max_length=500, blank=True)
+    dr_assigned = models.BooleanField(default=True)
+    dr_reminder = models.BooleanField(default=True)
+    dr_reminder_min = models.PositiveSmallIntegerField(default=30)
+
+    # Security & data
+    require_2fa = models.BooleanField(default=False)
+    session_timeout = models.PositiveSmallIntegerField(default=30)
+    min_password = models.PositiveSmallIntegerField(default=8)
+    lock_attempts = models.PositiveSmallIntegerField(default=5)
+    self_register = models.BooleanField(default=True)
+    retain_history = models.PositiveIntegerField(default=365)
+    mask_plates = models.BooleanField(default=False)
+    audit_log = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "System settings"
+        verbose_name_plural = "System settings"
+
+    def __str__(self):
+        return "System settings"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1                      # enforce a single row
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        # First time only: start from your existing settings.py values.
+        obj, _ = cls.objects.get_or_create(
+            pk=1,
+            defaults={
+                "free_minutes": int(getattr(settings, "PARKING_FREE_MINUTES", 60)),
+                "hourly_rate": getattr(settings, "PARKING_HOURLY_RATE", 20),
+            },
+        )
+        return obj
+
+
+# ---------------------------------------------------------------------------
+# NEW: Driver preferences (one row per driver, created on first visit
+# to the settings page). Phone stays on Profile.
+# ---------------------------------------------------------------------------
+class DriverPreference(models.Model):
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="preferences"
+    )
+
+    # Parking preferences
+    default_vehicle = models.ForeignKey(
+        Vehicle, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="+"
+    )
+    preferred_zone = models.ForeignKey(
+        Zone, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="+"
+    )
+    prefer_covered = models.BooleanField(default=False)
+    prefer_exit = models.BooleanField(default=False)
+    needs_pwd = models.BooleanField(default=False)
+    needs_ev = models.BooleanField(default=False)
+    auto_release = models.PositiveSmallIntegerField(default=0)     # hours, 0 = never
+    default_payment = models.CharField(max_length=10, default="gcash")
+
+    # Notifications
+    ch_app = models.BooleanField(default=True)
+    ch_email = models.BooleanField(default=True)
+    ch_sms = models.BooleanField(default=False)
+    n_assigned = models.BooleanField(default=True)
+    n_reminder = models.BooleanField(default=True)
+    n_expiry = models.PositiveSmallIntegerField(default=15)        # minutes, 0 = off
+    n_receipt = models.BooleanField(default=True)
+    n_promo = models.BooleanField(default=False)
+
+    # Privacy
+    mask_plate = models.BooleanField(default=False)
+    signin_alerts = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"Preferences of {self.user}"
+
+
+# ---------------------------------------------------------------------------
 # Automatically Create User Profile
 # ---------------------------------------------------------------------------
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
@@ -435,3 +607,15 @@ def create_profile(sender, instance, created, raw=False, **kwargs):
             approval_status=Profile.ApprovalStatus.APPROVED,
             is_main_admin=False
         )
+
+
+# ---------------------------------------------------------------------------
+# Free the parking slot when an active allocation is deleted
+# (e.g. when a driver who is currently parked has their account deleted).
+# ---------------------------------------------------------------------------
+@receiver(pre_delete, sender=Allocation)
+def free_slot_on_allocation_delete(sender, instance, **kwargs):
+    if instance.exit_time is None:
+        ParkingSlot.objects.filter(pk=instance.slot_id).update(
+            status=ParkingSlot.Status.AVAILABLE
+        ) 

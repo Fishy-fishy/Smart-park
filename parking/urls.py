@@ -49,6 +49,13 @@ urlpatterns = [
 
     path("notifications/data/", views.notifications_data, name="notifications_data"),
     path("allocation-history/", views.allocation_history, name="allocation_history"),
-    path('my-history/', views.my_history, name='my_history'),  
+    path('my-history/', views.my_history, name='my_history'),
+    path("payments/", views.payments, name="payments"),
+    path("payments/pay/<int:pk>/", views.make_payment, name="make_payment"),
+    path("payments/<int:pk>/confirm/", views.payment_confirm, name="payment_confirm"),
+    path("payments/<int:pk>/reject/", views.payment_reject, name="payment_reject"),
+    path("settings/", views.settings_page, name="settings"),
+    path("reservations/<int:pk>/checkin/", views.reservation_checkin, name="reservation_checkin"),
+    
     
 ]

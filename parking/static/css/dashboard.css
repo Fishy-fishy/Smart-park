@@ -978,3 +978,550 @@ button.btn-sm { border: 0; cursor: pointer; font-family: inherit; }
 #all-filter { flex-wrap:wrap; }
 #all-filter span { cursor:pointer; }
 #all-filter span.active { outline:2px solid #6366f1; }
+
+/* =========================================================
+   Additions for the new dashboard
+   Save as: static/css/dashboard_extra.css
+   (loaded AFTER dashboard.css; adjust colours to your own variables)
+   ========================================================= */
+
+/* [hidden] must always win over display rules */
+[hidden] { display: none !important; }
+
+/* ---------- accessibility ---------- */
+.skip-link {
+    position: absolute;
+    left: 12px;
+    top: -60px;
+    z-index: 1000;
+    padding: 10px 16px;
+    background: #111827;
+    color: #fff;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+}
+.skip-link:focus { top: 12px; }
+
+.sr-only {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+
+/* ---------- sidebar: disabled links + backdrop ---------- */
+.nav-link.disabled {
+    opacity: .55;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+.nav-link .soon {
+    margin-left: auto;
+    font-style: normal;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, .25);
+}
+
+.backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, .45);
+    z-index: 40;
+}
+@media (max-width: 900px) {
+    .backdrop.show { display: block; }
+}
+
+/* ---------- My Current Parking ---------- */
+.current-card { border-left: 4px solid #16a34a; }
+
+.current-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 14px;
+    margin-top: 4px;
+}
+.current-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: rgba(148, 163, 184, .12);
+}
+.current-item span { font-size: 12px; opacity: .7; }
+.current-item b { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.current-actions { margin-top: 16px; display: flex; gap: 10px; flex-wrap: wrap; }
+.current-actions .release-form { display: inline; }
+
+.empty.compact { padding: 18px 0; text-align: center; }
+.empty.compact i { font-size: 28px; opacity: .5; }
+.empty.compact p { margin: 8px 0 12px; }
+
+/* ---------- Quick Allocate extras ---------- */
+.hint {
+    display: block;
+    margin-top: 6px;
+    font-size: 12px;
+    opacity: .7;
+    line-height: 1.4;
+}
+.hint a { color: inherit; font-weight: 600; text-decoration: underline; }
+
+.form-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: stretch;
+}
+.form-actions .btn-primary { flex: 1 1 160px; }
+
+.btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 11px 16px;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, .5);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    flex: 1 1 140px;
+}
+.btn-secondary:hover { background: rgba(148, 163, 184, .15); }
+
+.field .input + .input { margin-top: 8px; }
+
+/* select / input shown but locked by script */
+select:disabled { opacity: .75; cursor: not-allowed; }
+
+/* ---------- map: "my slot" highlight ---------- */
+.slot.mine {
+    outline: 3px solid #2563eb;
+    outline-offset: 2px;
+    position: relative;
+}
+.slot.mine::after {
+    content: "YOU";
+    position: absolute;
+    top: -8px;
+    right: -6px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: #2563eb;
+    color: #fff;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: .05em;
+}
+.lg.mine {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border-radius: 3px;
+    border: 2px solid #2563eb;
+    background: transparent;
+}
+.legend-mine { cursor: default; }
+
+/* ---------- misc ---------- */
+.badge.active { white-space: nowrap; }
+.release-form { margin: 0; }
+.modal-actions .btn-secondary { flex: 0 1 auto; }
+
+@media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+
+/* =====================================================
+   SMARTPARK — UNIFIED BUTTON SYSTEM
+   Add at the VERY BOTTOM of dashboard.css
+   ===================================================== */
+
+:root {
+    --btn-height: 44px;
+    --btn-radius: 12px;
+    --btn-padding: 0 17px;
+}
+
+/* Base button */
+button,
+.btn,
+.btn-primary,
+.btn-secondary,
+.btn-sm,
+.logout-btn,
+a.btn,
+a.btn-primary,
+a.btn-secondary {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+/* Standard button */
+.btn,
+.btn-primary,
+.btn-secondary,
+.logout-btn {
+    min-height: var(--btn-height);
+    padding: var(--btn-padding);
+    border-radius: var(--btn-radius);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: all .22s ease;
+}
+
+/* Primary */
+.btn-primary {
+    border: 1px solid transparent;
+    background: linear-gradient(
+        135deg,
+        var(--primary),
+        var(--violet)
+    );
+    color: #fff;
+    box-shadow: 0 5px 14px rgba(99,102,241,.20);
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 9px 20px rgba(99,102,241,.30);
+}
+
+/* Secondary */
+.btn-secondary {
+    border: 1px solid var(--border);
+    background: var(--card-solid);
+    color: var(--text);
+}
+
+.btn-secondary:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: var(--primary-soft);
+}
+
+/* Compact buttons for tables */
+.btn-sm,
+button.btn-sm {
+    min-height: 34px;
+    padding: 7px 12px;
+    border-radius: 9px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    font-size: 12px;
+    white-space: nowrap;
+    border: 1px solid transparent;
+}
+
+/* Danger */
+.btn-danger {
+    background: var(--red-soft);
+    color: var(--red-text);
+    border: 1px solid transparent;
+}
+
+.btn-danger:hover {
+    background: var(--red);
+    color: #fff;
+}
+
+/* Success */
+.btn-success {
+    background: var(--green-soft);
+    color: var(--green-text);
+    border: 1px solid transparent;
+}
+
+.btn-success:hover {
+    background: var(--green);
+    color: #fff;
+}
+
+/* Icon-only buttons */
+.btn-icon {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    display: inline-grid;
+    place-items: center;
+    border: 1px solid var(--border);
+    border-radius: 11px;
+    background: var(--card-solid);
+    color: var(--muted);
+    cursor: pointer;
+    transition: all .2s ease;
+}
+
+.btn-icon:hover {
+    color: var(--primary);
+    border-color: var(--primary);
+    background: var(--primary-soft);
+}
+
+/* Table action arrangement */
+.table-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 7px;
+    flex-wrap: nowrap;
+}
+
+/* Form button arrangement */
+.form-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.form-actions > button,
+.form-actions > a {
+    min-height: var(--btn-height);
+}
+
+/* Disabled */
+button:disabled,
+.btn:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+/* Mobile */
+@media (max-width: 560px) {
+    .form-actions {
+        flex-direction: column;
+    }
+
+    .form-actions > button,
+    .form-actions > a {
+        width: 100%;
+    }
+
+    .table-actions {
+        justify-content: flex-start;
+    }
+}
+
+/* =====================================
+   LIVE SLOT MAP - ORGANIZED HEADER
+===================================== */
+
+.slot-map-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+    padding-bottom: 18px;
+}
+
+.slot-map-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.slot-map-heading h3 {
+    margin: 0;
+}
+
+.slot-map-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.slot-map-controls button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 38px;
+    padding: 9px 15px;
+    border-radius: 10px;
+    white-space: nowrap;
+}
+
+.slot-map-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding: 14px 16px;
+    margin-bottom: 20px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+}
+
+.toolbar-label {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+.slot-map-filters {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 9px;
+    flex-wrap: wrap;
+}
+
+.slot-map-filters span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--card-solid);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: 0.2s ease;
+}
+
+.slot-map-filters span:hover {
+    border-color: var(--primary);
+    background: var(--primary-soft);
+    color: var(--primary);
+    transform: translateY(-1px);
+}
+
+.slot-map-filters span.active {
+    border-color: var(--primary);
+    background: var(--primary-soft);
+    color: var(--primary);
+}
+
+.slot-map-filters .lg {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* Mobile arrangement */
+@media (max-width: 640px) {
+    .slot-map-header {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .slot-map-controls {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        width: 100%;
+    }
+
+    .slot-map-controls button {
+        width: 100%;
+        padding: 10px 8px;
+        font-size: 11px;
+    }
+
+    .slot-map-toolbar {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .slot-map-filters {
+        justify-content: flex-start;
+        width: 100%;
+    }
+}
+
+/* =====================================================
+   COMPACT MODAL BUTTONS
+   ===================================================== */
+
+.modal-box {
+    max-width: 440px;
+}
+
+.modal-box .modal-actions {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.modal-box .modal-actions button,
+.modal-box .modal-actions .btn-secondary,
+.modal-box .modal-actions .btn-allocate,
+.modal-box .modal-actions .btn-cancel,
+.modal-box .modal-actions .btn-confirm {
+    flex: 0 0 auto;
+    min-height: 36px;
+    height: 36px;
+    padding: 0 16px;
+    border-radius: 9px;
+    font-size: 12.5px;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    box-shadow: none;
+}
+
+.modal-box .modal-actions .btn-secondary:hover,
+.modal-box .modal-actions .btn-allocate:hover {
+    transform: none;
+    box-shadow: none;
+}
+
+/* Smaller icon circle at the top of the modal */
+.modal-icon {
+    width: 48px;
+    height: 48px;
+    font-size: 22px;
+    margin-bottom: 12px;
+}
+
+/* Phones: keep buttons small, but let them share the row */
+@media (max-width: 480px) {
+    .modal-box .modal-actions button,
+    .modal-box .modal-actions .btn-secondary {
+        flex: 1 1 auto;
+        padding: 0 12px;
+    }
+}
